@@ -52,7 +52,7 @@ body {
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.12s ease, visibility 0.12s ease;
+    transition: none;
     z-index: 10;
 }
 
@@ -79,7 +79,6 @@ body {
     box-shadow: 0 10px 40px rgba(233, 69, 96, 0.3);
     text-align: center;
     min-width: 320px;
-    animation: slideUp 0.5s ease-out;
 }
 
 @keyframes slideUp {
