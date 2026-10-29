@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Nestjs specific
 /dist
 /node_modules
@@ -22,3 +23,24 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+=======
+# Test artifacts (hình ảnh chụp màn hình, log server)
+test/screenshots/
+test/server.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+>>>>>>> 476029e (feat: Street Football mini game - Nekketsu/Goal3 style)
