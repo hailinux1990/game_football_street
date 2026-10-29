@@ -40,6 +40,12 @@ class Player extends Entity {
         this.hairStyle = Math.floor(Math.random() * 3); // 0=spiky, 1=bowl, 2=flat
         this.wing = Math.random() < 0.5 ? -1 : 1; // cánh hoạt động: -1 trên, +1 dưới
         this.aiRole = null; // vai trò AI: 'press', 'support', 'fallback', 'defend'
+
+        // ===== Hành động (dùng cho animation 3D) =====
+        // 'kick' | 'pass' | 'skill' | 'celebrate' | 'tackle' | 'dive'
+        this.action = null;
+        this.actionT = 0;
+        this.actionDur = 0;
     }
 
     switchSides(team) {
@@ -63,6 +69,25 @@ class Player extends Entity {
         this.ballStolenCooldown = Math.max(0, (this.ballStolenCooldown || 0) - dt);
         this.ballProtectTimer = Math.max(0, (this.ballProtectTimer || 0) - dt);
         this.tackleCooldown = Math.max(0, (this.tackleCooldown || 0) - dt);
+        this.tickAction(dt);
+    }
+
+    // Đặt hành động cho animation (3D)
+    setAction(name, duration) {
+        this.action = name;
+        this.actionDur = duration || 0.5;
+        this.actionT = this.actionDur;
+    }
+
+    // Đếm ngược thời gian hành động
+    tickAction(dt) {
+        if (this.actionT > 0) {
+            this.actionT -= dt;
+            if (this.actionT <= 0) {
+                this.actionT = 0;
+                this.action = null;
+            }
+        }
     }
 
     setRole(role) {

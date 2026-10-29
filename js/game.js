@@ -281,7 +281,8 @@ const DEFAULT_KEY_BINDINGS = {
     pass: 'Space',
     shoot: 'KeyF',
     skill: 'KeyE',
-    switchPlayer: 'KeyQ'
+    switchPlayer: 'KeyQ',
+    toggleCamera: 'KeyC'
 };
 
 const KEY_BINDING_LABELS = {
@@ -293,7 +294,8 @@ const KEY_BINDING_LABELS = {
     pass: 'Chuyền bóng',
     shoot: 'Sút bóng',
     skill: 'Kỹ năng',
-    switchPlayer: 'Đổi cầu thủ'
+    switchPlayer: 'Đổi cầu thủ',
+    toggleCamera: 'Đổi góc nhìn'
 };
 
 // Tên hiển thị thân thiện cho phím

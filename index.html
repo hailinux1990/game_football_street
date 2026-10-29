@@ -3,26 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Street Football - FIFA Street 3 Style</title>
-    <link rel="stylesheet" href="style.css?v=1793099602">
+    <title>Street Football 3D - FIFA Street Style</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="style.css?v=20261028b">
 </head>
 <body>
     <div id="game-container">
+        <canvas id="game-canvas-3d"></canvas>
         <canvas id="game-canvas"></canvas>
         <div id="ui-overlay">
             <!-- Main Menu -->
             <div id="main-menu" class="screen active">
                 <div class="menu-content">
                     <h1 class="game-title">STREET FOOTBALL</h1>
-                    <p class="subtitle">FIFA Street 3 Style</p>
+                    <p class="subtitle">FIFA Street 3D · Third-Person</p>
                     <div class="menu-buttons">
                         <button id="btn-play" class="menu-btn primary">CHƠI NGAY</button>
                         <button id="btn-settings" class="menu-btn">CÀI ĐẶT</button>
                         <button id="btn-credits" class="menu-btn">THÔNG TIN</button>
                     </div>
                     <div class="controls-hint">
-                        <span>WASD</span> Di chuyển | <span>Space</span> Chuyền | <span>F</span> Sút | <span>E</span> Kỹ năng | <span>Shift</span> Chạy nhanh | <span>Q</span> Đổi người
+                        <span>WASD</span> Di chuyển | <span>Space</span> Chuyền | <span>F</span> Sút | <span>E</span> Kỹ năng | <span>Shift</span> Chạy nhanh | <span>Q</span> Đổi người | <span>C</span> Đổi góc nhìn
                     </div>
+                    <div class="menu-badge">🕹️ 3D THIRD-PERSON · CAMERA SAU LƯNG CẦU THỦ</div>
                 </div>
             </div>
 
@@ -46,6 +49,22 @@
                                 <option value="3">3</option>
                                 <option value="5" selected>5</option>
                                 <option value="10">10</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="setting-group camera-mode-group">
+                        <label>🎥 Góc nhìn:
+                            <select id="camera-mode">
+                                <option value="third">Người thứ ba (sau lưng cầu thủ)</option>
+                                <option value="wide">Toàn cảnh sân bóng</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="setting-group">
+                        <label>🖥️ Chất lượng 3D:
+                            <select id="gfx-quality">
+                                <option value="high" selected>Cao (đổ bóng)</option>
+                                <option value="low">Thấp (máy yếu)</option>
                             </select>
                         </label>
                     </div>
@@ -102,9 +121,10 @@
             <div id="credits-screen" class="screen">
                 <div class="menu-content">
                     <h2>THÔNG TIN</h2>
-                    <p>Street Football Mini Game</p>
-                    <p>Phong cách FIFA Street 3</p>
-                    <p>6 cầu thủ (3v3) - AI đối kháng</p>
+                    <p>Street Football 3D Mini Game</p>
+                    <p>Phong cách FIFA Street 3 · đồ hoạ 3D WebGL</p>
+                    <p>6 cầu thủ 3D có đầy đủ chân tay, animation sút/chuyền/kỹ thuật</p>
+                    <p>Camera góc nhìn người thứ ba hoặc toàn cảnh sân</p>
                     <br>
                     <p>Controls:</p>
                     <p>WASD / Mũi tên - Di chuyển cầu thủ</p>
@@ -113,6 +133,8 @@
                     <p>E - Kỹ năng đặc biệt (khi có bóng)</p>
                     <p>Shift - Chạy nhanh (tốn thể lực)</p>
                     <p>Q - Chuyển cầu thủ điều khiển</p>
+                    <p>C - Đổi góc nhìn (người thứ ba / toàn cảnh)</p>
+                    <p>Kéo chuột - xoay camera | Cuộn chuột - zoom</p>
                     <p>ESC - Tạm dừng</p>
                     <br>
                     <p>🎮 Tay cầm PS5 (DualSense):</p>
@@ -161,6 +183,7 @@
                         <span id="possession-team">ĐỎ</span> kiểm soát
                     </div>
                 </div>
+                <div class="camera-badge" id="camera-mode-badge">🎥 NGƯỜI THỨ BA</div>
             </div>
 
             <!-- Goal Celebration -->
@@ -186,12 +209,15 @@
         </div>
     </div>
 
-    <script src="js/game.js?v=1793099602"></script>
-    <script src="js/entities.js?v=1793099602"></script>
-    <script src="js/field.js?v=1793099602"></script>
-    <script src="js/ai.js?v=1793099602"></script>
-    
-    <script src="js/ui.js?v=1793099602"></script>
-    <script src="js/main.js?v=1793099602"></script>
+    <script src="js/vendor/three.min.js?v=160"></script>
+    <script src="js/game.js?v=20261028b"></script>
+    <script src="js/entities.js?v=20261028b"></script>
+    <script src="js/field.js?v=20261028b"></script>
+    <script src="js/ai.js?v=20261028b"></script>
+    <script src="js/player_model.js?v=20261028b"></script>
+    <script src="js/render3d.js?v=20261028b"></script>
+
+    <script src="js/ui.js?v=20261028b"></script>
+    <script src="js/main.js?v=20261028b"></script>
 </body>
 </html>

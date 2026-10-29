@@ -39,8 +39,41 @@ class Game {
         this.goalCelebrationTimer = 0;
         this.difficulty = 'normal';
 
+        // ===== 3D =====
+        // 'third'  = góc nhìn người thứ ba (camera sau lưng cầu thủ)
+        // 'wide'   = toàn cảnh sân bóng nhỏ
+        this.cameraMode = 'third';
+        this.renderer3d = null;
+        this.lastScorer = null;
+        this._lastShooter = null;
+        this.loadCameraMode();
+
         this.createPlayers();
         this.setupUI();
+    }
+
+    // ===== Chế độ camera (lưu localStorage) =====
+    loadCameraMode() {
+        try {
+            const v = localStorage.getItem('sf_camera_mode');
+            if (v === 'third' || v === 'wide') this.cameraMode = v;
+        } catch (e) { /* ignore */ }
+    }
+
+    saveCameraMode() {
+        try { localStorage.setItem('sf_camera_mode', this.cameraMode); } catch (e) { /* ignore */ }
+    }
+
+    setCameraMode(mode) {
+        this.cameraMode = (mode === 'wide') ? 'wide' : 'third';
+        if (this.renderer3d) this.renderer3d.setCameraMode(this.cameraMode);
+        this.saveCameraMode();
+        if (typeof this.onCameraModeChange === 'function') this.onCameraModeChange(this.cameraMode);
+        return this.cameraMode;
+    }
+
+    toggleCameraMode() {
+        return this.setCameraMode(this.cameraMode === 'third' ? 'wide' : 'third');
     }
 
     createPlayers() {
@@ -128,6 +161,8 @@ class Game {
             this.updatePlaying(dt);
         } else if (this.state === GameState.GOAL_CELEBRATION) {
             this.goalCelebrationTimer -= dt;
+            // Vẫn cập nhật animation ăn mừng của cầu thủ
+            for (const p of this.players) p.tickAction(dt);
             if (this.goalCelebrationTimer <= 0) {
                 document.getElementById('goal-celebration').classList.add('hidden');
                 this.resetPositions();
@@ -227,6 +262,17 @@ class Game {
             const len = Math.hypot(dx, dy);
             dx /= len; dy /= len;
 
+            // ===== Góc nhìn người thứ ba: di chuyển theo hướng camera =====
+            // W = đi xa camera (hướng nhìn), S = về phía camera, A/D = sang trái/phải
+            if (this.renderer3d && this.cameraMode === 'third') {
+                const yaw = this.renderer3d.getYaw();
+                const fwdX = Math.cos(yaw), fwdY = Math.sin(yaw);   // hướng camera nhìn
+                const rightX = -fwdY, rightY = fwdX;                // phía bên phải màn hình
+                const wx = dx * rightX + (-dy) * fwdX;
+                const wy = dx * rightY + (-dy) * fwdY;
+                dx = wx; dy = wy;
+            }
+
             const sprint = this.input.isActionDown('sprint') && p.stamina > 10;
             const speed = p.maxSpeed * (sprint ? 1.5 : 1);
 
@@ -237,12 +283,22 @@ class Game {
             p.animTime += dt;
         }
 
-        // If player has ball, keep ball in front
+        // If player has ball, keep ball in front (theo hướng đang di chuyển / hướng nhìn)
         if (p.hasBall) {
-            const frontX = p.pos.x + dx * 18;
-            const frontY = p.pos.y + dy * 18;
-            this.ball.pos.x = frontX;
-            this.ball.pos.y = frontY;
+            let fx = dx, fy = dy;
+            if (dx === 0 && dy === 0) {
+                // Đứng yên: giữ bóng ở phía trước theo hướng gần nhất
+                fx = (p.lastDirX !== undefined ? p.lastDirX : 1);
+                fy = (p.lastDirY !== undefined ? p.lastDirY : 0);
+            } else {
+                p.lastDirX = fx;
+                p.lastDirY = fy;
+            }
+            const f = this.field;
+            const bx = p.pos.x + fx * 18;
+            const by = p.pos.y + fy * 18;
+            this.ball.pos.x = Math.max(f.x + 10, Math.min(f.x + f.width - 10, bx));
+            this.ball.pos.y = Math.max(f.y + 10, Math.min(f.y + f.height - 10, by));
             this.ball.owner = p;
             this.ball.vel = new Vector2(0, 0);
         }
@@ -259,6 +315,9 @@ class Game {
         }
         if (this.input.isActionPressed('switchPlayer')) {
             this.switchPlayer();
+        }
+        if (this.input.isActionPressed('toggleCamera')) {
+            this.toggleCameraMode();
         }
     }
 
@@ -296,6 +355,7 @@ class Game {
         this.ball.hasPhysics = true;
         p.hasBall = false;
         p.passCooldown = 0.35;
+        p.setAction('pass', 0.32);
         this.ball.owner = null;
         this.audio.playTone(400, 0.08, 'sine', 0.1);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#fff', 5, { speed: 3 });
@@ -325,6 +385,8 @@ class Game {
         this.ball.hasPhysics = true;
         p.hasBall = false;
         p.passCooldown = 0.35;
+        p.setAction('kick', 0.5);
+        this._lastShooter = p;
         this.ball.owner = null;
         this.audio.playTone(150, 0.15, 'square', 0.15);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#ffdd00', 8, { speed: 5 });
@@ -372,6 +434,7 @@ class Game {
         this.particles.emitBurst(p.pos.x, p.pos.y, '#ffd700', 20);
         this.audio.playTone(800, 0.15, 'sawtooth', 0.15);
         this.camera.shake(4, 0.15);
+        p.setAction('skill', 0.6);
     }
 
     switchPlayer() {
@@ -482,6 +545,7 @@ class Game {
                     this.ball.owner = null;
                     p.hasBall = false;
                     p.passCooldown = 0.4;
+                    p.setAction('kick', 0.5);
                     for (const pp of this.players) pp.hasBall = false;
                     p.gkKickCd = 20;  // 20 frames cooldown
                 }
@@ -522,6 +586,8 @@ class Game {
                 this.ball.owner = null;
                 p.hasBall = false;
                 p.passCooldown = 0.35;
+                p.setAction('kick', 0.5);
+                this._lastShooter = p;
                 return;
             }
 
@@ -541,6 +607,7 @@ class Game {
                     this.ball.owner = null;
                     p.hasBall = false;
                     p.passCooldown = 0.35;
+                    p.setAction('pass', 0.32);
                     return;
                 }
             }
@@ -874,6 +941,7 @@ class Game {
                 p.ballProtectTimer = 0.4;
                 this.ball.owner = p;
                 this.ball.vel = new Vector2(0, 0);
+                p.setAction('tackle', 0.5);
                 this.particles.emit(p.pos.x, p.pos.y, '#ffd700', 8, { speed: 5 });
                 return;
             }
@@ -925,6 +993,17 @@ class Game {
         this.ball.vel = new Vector2(0, 0);
         this.ball.owner = null;
         for (const p of this.players) p.hasBall = false;
+
+        // Cầu thủ ghi bàn gần nhất (dùng cho camera + animation ăn mừng)
+        const scorers = this.teamPlayers[team] || [];
+        const shooter = this._lastShooter;
+        this.lastScorer = (shooter && shooter.team === team) ? shooter : (scorers[0] || null);
+        this._lastShooter = null;
+        this._goalTeam = team;
+        for (const p of scorers) {
+            if (p === this.lastScorer) p.setAction('celebrate', 1.6);
+            else p.setAction('celebrate', 1.6);
+        }
 
         this.particles.emitBurst(
             this.field.x + this.field.width / 2,
@@ -979,6 +1058,21 @@ class Game {
 
     // ============= RENDERING =============
     draw() {
+        // Ưu tiên renderer 3D (WebGL). Nếu không có / lỗi -> quay về 2D.
+        if (this.renderer3d) {
+            try {
+                this.renderer3d.frame(this.deltaTime || 0.016);
+                return;
+            } catch (e) {
+                console.error('[3D] Lỗi render, quay về chế độ 2D:', String((e && (e.stack || e.message)) || e));
+                this.renderer3d = null;
+                if (document.body) document.body.classList.remove('mode-3d');
+            }
+        }
+        this.draw2D();
+    }
+
+    draw2D() {
         const ctx = this.ctx;
         const f = this.field;
 
@@ -1495,6 +1589,42 @@ function initGame() {
     const game = new Game(canvas);
     window.game = game;
 
+    // ===== KHỞI TẠO RENDERER 3D (WebGL) =====
+    initRenderer3D();
+
+    function initRenderer3D() {
+        const canvas3d = document.getElementById('game-canvas-3d');
+        if (!canvas3d) return;
+        if (!window.THREE || typeof Renderer3D !== 'function' || typeof PlayerModel !== 'function') {
+            console.warn('[3D] Thiếu three.js/PlayerModel -> dùng chế độ 2D');
+            return;
+        }
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const gfx = params.get('gfx');
+            if (gfx === '2d') {
+                console.info('[3D] Ép chế độ 2D bằng ?gfx=2d');
+                return;
+            }
+            let savedGfx = null;
+            try { savedGfx = localStorage.getItem('sf_gfx_quality'); } catch (e) { /* ignore */ }
+            const quality = gfx === 'low' ? 'low'
+                : gfx === 'high' ? 'high'
+                : (savedGfx === 'low' ? 'low' : 'high');
+            game.renderer3d = new Renderer3D(canvas3d, game, { quality });
+            game.renderer3d.setCameraMode(game.cameraMode);
+            document.body.classList.add('mode-3d');
+            window.addEventListener('resize', () => {
+                if (game.renderer3d) game.renderer3d.resize();
+            });
+            updateCameraBadge();
+        } catch (e) {
+            console.error('[3D] Khởi tạo WebGL thất bại, dùng chế độ 2D:', String((e && (e.stack || e.message)) || e));
+            game.renderer3d = null;
+            document.body.classList.remove('mode-3d');
+        }
+    }
+
     // --- UI Wiring ---
     const show = (id) => document.getElementById(id).classList.add('active');
     const hide = (id) => document.getElementById(id).classList.remove('active');
@@ -1562,6 +1692,34 @@ function initGame() {
         };
     }
 
+    // ===== Góc nhìn camera (3D) & chất lượng đồ họa =====
+    const cameraModeEl = document.getElementById('camera-mode');
+    if (cameraModeEl) {
+        cameraModeEl.value = game.cameraMode;
+        cameraModeEl.onchange = (e) => game.setCameraMode(e.target.value);
+    }
+    game.onCameraModeChange = () => updateCameraBadge();
+
+    const gfxQualityEl = document.getElementById('gfx-quality');
+    if (gfxQualityEl) {
+        if (game.renderer3d) gfxQualityEl.value = game.renderer3d.quality;
+        gfxQualityEl.onchange = (e) => {
+            const q = e.target.value === 'low' ? 'low' : 'high';
+            if (game.renderer3d) game.renderer3d.setQuality(q);
+            try { localStorage.setItem('sf_gfx_quality', q); } catch (err) { /* ignore */ }
+        };
+    }
+
+    function updateCameraBadge() {
+        const badge = document.getElementById('camera-mode-badge');
+        if (badge) {
+            badge.textContent = game.cameraMode === 'wide' ? '🎥 TOÀN CẢNH' : '🎥 NGƯỜI THỨ BA';
+        }
+        const sel = document.getElementById('camera-mode');
+        if (sel) sel.value = game.cameraMode;
+    }
+    updateCameraBadge();
+
     function updateControlModeHint() {
         const hintEl = document.getElementById('control-mode-warning');
         if (!hintEl) return;
@@ -1570,7 +1728,7 @@ function initGame() {
     }
 
     // ===== Key binding UI =====
-    const ACTION_ORDER = ['moveUp','moveDown','moveLeft','moveRight','sprint','pass','shoot','skill','switchPlayer'];
+    const ACTION_ORDER = ['moveUp','moveDown','moveLeft','moveRight','sprint','pass','shoot','skill','switchPlayer','toggleCamera'];
     let listeningRow = null;
     let listeningAction = null;
 
@@ -1657,7 +1815,8 @@ function initGame() {
             '<span>' + k('shoot') + '</span> Sút | ' +
             '<span>' + k('skill') + '</span> Kỹ năng | ' +
             '<span>' + k('sprint') + '</span> Chạy nhanh | ' +
-            '<span>' + k('switchPlayer') + '</span> Đổi người' +
+            '<span>' + k('switchPlayer') + '</span> Đổi người | ' +
+            '<span>' + k('toggleCamera') + '</span> Đổi góc nhìn' +
             '<br><span>🎮 PS5</span> Cần trái di chuyển · ✕ Chuyền · □ Sút · ○ Kỹ năng · △ Đổi người · R2 Chạy';
     }
 

@@ -1,69 +1,90 @@
-# Street Football - FIFA Street 3 Style ⚽
+# Street Football 3D - FIFA Street Style ⚽
 
-Game mini bóng đá đường phố (street football) theo phong cách **FIFA Street 3**.
+Game bóng đá đường phố (street football) **3D** theo phong cách **FIFA Street**, render bằng WebGL (three.js),
+với **cầu thủ có đầy đủ chân tay** (mô hình humanoid phân khúc + animation procedural) và
+**góc nhìn người thứ ba** — camera đặt sau lưng cầu thủ, có thể chuyển sang **toàn cảnh sân bóng nhỏ**.
 
-## Đặc điểm
+## Điểm mới: 3D + góc nhìn người thứ ba
 
-- **Nhân vật phong cách Nekketsu (Goal 3 NES)**: Đầu to chibi, mắt to biểu cảm, tóc đa dạng (spiky/bowl/flat), áo đấu gradient 3D, chân tay chuyển động khi chạy
-
-
-- **6 cầu thủ trên sân**: 3 đội Đỏ vs 3 đội Xanh (1 thủ môn, 1 hậu vệ, 1 tiền đạo mỗi đội)
-- **NPC thông minh**: 
-  - Đồng đội **chạy chỗ tạo khoảng trống** để nhận đường chuyền khi đội có bóng (support run)
-  - Khi mất bóng, NPC **tự động lùi về đội hình phòng thủ** (defensive fallback)
-  - **Tự động chuyển quyền điều khiển** sang cầu thủ gần bóng nhất khi đối phương giữ bóng, và sang người nhận bóng khi chuyền thành công
-  - AI chuyền bóng thông minh: ưu tiên đồng đội phía trước, thoáng, đang chạy chỗ
-- **Gameplay hành động**: Tốc độ nhanh, ghi bàn liên tục, kỹ năng đặc biệt
-- **Sân đường phố**: Có tường bao quanh, bóng nảy, kèo hai đầu
-- **Phong cách FIFA Street**: Sút vào góc, né hậu vệ, kỹ năng dash
+- **Cầu thủ 3D đầy đủ chân tay**: mỗi cầu thủ được dựng từ ~45 bộ phận (đầu, tóc, thân, hông, 2 tay với
+  vai → khuỷu → bàn tay, 2 chân với đùi → gối → cổ chân → giày). Không còn nhân vật "đầu to chibi 2D".
+- **Animation procedural** (không cần file model/animation ngoài):
+  - Đứng yên: thở, đung đưa nhẹ
+  - **Chạy**: đùi vung, gối gập/duỗi, tay vung ngược pha, thân đổ người, dáng chạy nhanh
+  - **Sút / Chuyền**: lấy đà → vung chân → theo đà, xoay người, tay giữ thăng bằng
+  - **Kỹ năng**: hạ thấp trọng tâm + xoay người (động tác kỹ thuật)
+  - **Tắc bóng (tackle)**, **thủ môn bay người (dive)**, **ăn mừng** (giơ 2 tay, nhảy)
+- **Camera góc nhìn người thứ ba**: đặt sau lưng cầu thủ đang điều khiển, cao hơn đầu một chút, tự bám
+  theo hướng chạy, tự lai về phía bóng khi bóng ở xa để luôn quan sát được bóng.
+  - Kéo chuột để xoay quanh cầu thủ, lăn chuột để zoom.
+  - Di chuyển theo hướng camera: `W` = đi xa camera (về phía trước), `S` = lùi về camera, `A/D` = sang trái/phải.
+- **Camera toàn cảnh sân bóng nhỏ** (bấm `C` hoặc chọn trong Cài đặt): nhìn từ trên cao bao trọn sân,
+  thấy cả 6 cầu thủ, khung thành và bóng.
+- **Sân 3D**: mặt sân cỏ nhân tạo có vạch kẻ, tường bê tông graffiti, khung thành + lưới, cột đèn pha,
+  bảng hiệu, nón tập, băng ghế dự bị; đèn pha đổ bóng (chất lượng Cao).
+- **Bóng 3D**: lăn theo vận tốc, nảy nhẹ khi bị sút, vòng sáng dưới chân bóng cho dễ thấy.
 
 ## Cách chơi
 
 | Phím | Chức năng |
 |------|-----------|
-| **WASD / Mũi tên** | Di chuyển cầu thủ |
+| **WASD / Mũi tên** | Di chuyển cầu thủ (theo hướng camera ở góc nhìn người thứ ba) |
 | **Space** | Chuyền bóng cho đồng đội gần nhất |
 | **F** | Sút bóng vào khung thành |
 | **E** | Kỹ năng đặc biệt (dash nhanh, tốn 25 thể lực) |
 | **Shift** | Chạy nhanh (tốn thể lực) |
 | **Q** | Chuyển cầu thủ điều khiển |
+| **C** | **Đổi góc nhìn: Người thứ ba ↔ Toàn cảnh sân** |
+| **Chuột** | Kéo để xoay camera, lăn để zoom (góc nhìn người thứ ba) |
 | **ESC** | Tạm dừng |
 
-> 💡 **Tất cả phím có thể tùy chỉnh** trong **Cài đặt → Bàn phím**. Nhấn vào hàng phím, nhấn phím mới để gán. Cài đặt được lưu tự động (localStorage).
+> 💡 **Tất cả phím có thể tùy chỉnh** trong **Cài đặt → Bàn phím**.
+
+## Cài đặt 3D
+
+Trong **Cài đặt**:
+
+- **🎥 Góc nhìn**: `Người thứ ba (sau lưng cầu thủ)` hoặc `Toàn cảnh sân bóng`
+- **🖥️ Chất lượng 3D**: `Cao (đổ bóng)` hoặc `Thấp (máy yếu)`
+
+Có thể ép chế độ bằng URL:
+
+| URL | Ý nghĩa |
+|-----|---------|
+| `http://localhost:8080/` | 3D chất lượng cao (đổ bóng) |
+| `http://localhost:8080/?gfx=low` | 3D chất lượng thấp (không đổ bóng, êm hơn trên máy yếu) |
+| `http://localhost:8080/?gfx=2d` | Ép chế độ 2D cũ (dự phòng khi máy không có WebGL) |
+
+Nếu trình duyệt không hỗ trợ WebGL, game tự động quay về chế độ 2D cũ (không bị lỗi trắng màn hình).
+
+## Gameplay
+
+- **6 cầu thủ trên sân**: 3 đội Đỏ vs 3 đội Xanh (1 thủ môn, 1 hậu vệ, 1 tiền đạo mỗi đội)
+- **NPC thông minh**:
+  - Đồng đội **chạy chỗ tạo khoảng trống** để nhận đường chuyền khi đội có bóng (support run)
+  - Khi mất bóng, NPC **tự động lùi về đội hình phòng thủ** (defensive fallback)
+  - **Tự động chuyển quyền điều khiển** sang cầu thủ gần bóng nhất khi đối phương giữ bóng
+  - AI chuyền bóng thông minh: ưu tiên đồng đội phía trước, thoáng, đang chạy chỗ
+- **Thủ môn** bắt góc, bay người theo hướng bóng
+- **Sân đường phố**: tường bao quanh, bóng nảy tường
 
 ## 🎮 Tay cầm PS5 (DualSense)
 
-Hỗ trợ tay cầm PS5 qua **Gamepad API** (USB hoặc Bluetooth). Cắm tay cầm và nhấn một nút để trình duyệt nhận diện.
+| Nút PS5 | Chức năng |
+|---------|-----------|
+| **Cần trái / D-pad** | Di chuyển cầu thủ |
+| **✕ Cross** | Chuyền bóng |
+| **□ Square** | Sút bóng |
+| **○ Circle** | Kỹ năng |
+| **△ Triangle** | Đổi cầu thủ |
+| **R2** | Chạy nhanh |
 
-| Nút PS5 | Chức năng | Có thể đổi? |
-|---------|-----------|-------------|
-| **Cần trái / D-pad** | Di chuyển cầu thủ | Cố định |
-| **✕ Cross** | Chuyền bóng | ✅ |
-| **□ Square** | Sút bóng | ✅ |
-| **○ Circle** | Kỹ năng | ✅ |
-| **△ Triangle** | Đổi cầu thủ | ✅ |
-| **R2** | Chạy nhanh | ✅ |
-
-### Chọn chế độ điều khiển
-Vào **Cài đặt → 🎮 Chế độ điều khiển** để chọn:
-- **⌨️ Bàn phím** — chỉ dùng bàn phím để chơi
-- **🎮 Tay cầm PS5** — chỉ dùng tay cầm (cần trái + các nút)
-
-> Nếu chọn chế độ Tay cầm nhưng chưa kết nối, game hiện cảnh báo và tạm dùng bàn phím để không bị kẹt.
-
-### Cài đặt tay cầm chi tiết
-Vào **Cài đặt → 🎮 TAY CẦM PS5** để:
-- Xem trạng thái kết nối (đèn xanh = đã kết nối) + chế độ hiện tại
-- Bật/tắt nhận diện tay cầm
-- **Đổi nút** (nhấn vào hàng nút → nhấn nút mới trên tay cầm)
-- Đặt lại mặc định
-
-Cài đặt tay cầm được lưu tự động (localStorage).
+Chọn **Cài đặt → 🎮 Chế độ điều khiển** để dùng Bàn phím hoặc Tay cầm.
 
 ## Cài đặt và chạy
 
 ```bash
-# Khởi động server
+# Khởi động server tĩnh
 cd /home/hailinux/game_football
 python3 -m http.server 8080
 
@@ -71,38 +92,63 @@ python3 -m http.server 8080
 # http://localhost:8080
 ```
 
+> Game cần được phục vụ qua HTTP (không mở trực tiếp `file://`) để tải được `js/vendor/three.min.js`.
+
 ## Cấu trúc
 
 ```
 game_football/
-├── index.html          # Giao diện chính (menu, HUD, màn hình)
-├── style.css           # CSS styling
+├── index.html              # Giao diện chính (menu, HUD, màn hình)
+├── style.css               # CSS styling (gồm lớp canvas 3D, badge góc nhìn)
 ├── js/
-│   ├── game.js         # Game engine (Vector2, Entity, Camera, Audio, Input, Particle)
-│   ├── entities.js     # Player class, factory functions
-│   ├── field.js        # Field/sân bóng
-│   ├── ai.js           # AI Manager
-│   ├── ui.js           # UI Manager
-│   └── main.js         # Game logic chính (update, draw, game loop)
-└── test/               # Test harness (Node.js)
+│   ├── vendor/three.min.js # three.js (WebGL) - thư viện 3D, đóng gói cục bộ
+│   ├── game.js             # Game engine (Vector2, Entity, Camera 2D, Audio, Input)
+│   ├── entities.js         # Player class (có action/animation state), factory
+│   ├── field.js            # Field/sân bóng (toạ độ 2D của gameplay)
+│   ├── ai.js               # AI Manager
+│   ├── player_model.js     # MÔ HÌNH CẦU THỦ 3D: humanoid đầy đủ chân tay + animation
+│   ├── render3d.js         # RENDERER 3D: sân, tường, khung thành, ánh sáng, camera
+│   ├── ui.js               # UI Manager
+│   └── main.js             # Game logic chính (update, draw, game loop)
+└── test/                   # Test harness (Node.js + Puppeteer)
 ```
+
+### Kiến trúc 3D
+
+- **Gameplay vẫn tính bằng toạ độ 2D** (`Vector2(x, y)`) như trước → không thay đổi luật chơi/AI.
+- `render3d.js` ánh xạ `(x, y)` → `(x, 0, z)` trong không gian 3D và dựng toàn bộ cảnh.
+- `player_model.js` dựng cầu thủ theo hệ xương: `hips → torso → head/arms`, `hips → legs`,
+  và cập nhật tư thế mỗi frame từ trạng thái (`speed`, `dirAngle`, `action`).
+- Hành động được kích hoạt từ gameplay: `tryShoot()` → `setAction('kick')`, `tryPass()` → `'pass'`,
+  `trySkill()` → `'skill'`, tắc bóng → `'tackle'`, ghi bàn → `'celebrate'`, thủ môn → `'dive'`.
 
 ## Tính năng kỹ thuật
 
-- **Physics**: Bóng bay với vận tốc, ma sát, nảy tường
-- **AI**: Đội hình, chasing, passing, shooting, defending với độ khó khác nhau
-- **Collision**: Cầu thủ-cầu thủ (separation), cầu thủ-bóng (pickup/tackle)
-- **Balance**: Thủ môn chậm nhưng bắt góc, AI độ khó Easy/Normal/Hard/Legend
-- **Eff​ects**: Particles, camera shake, ball trail, screen effects
+- **3D**: three.js r160 (WebGL 2), đèn pha đổ bóng (shadow map), tone mapping, sương mờ, texture vẽ
+  bằng canvas (cỏ, tường graffiti, lưới, bóng, bầu trời) → không cần tải asset ngoài.
+- **Animation procedural**: ~20 khớp xương, làm mượt bằng exponential damping, chuyển động theo tốc độ thực.
+- **Physics**: bóng bay với vận tốc, ma sát, nảy tường
+- **AI**: đội hình, chasing, passing, shooting, defending với độ khó khác nhau
+- **Collision**: cầu thủ-cầu thủ (separation), cầu thủ-bóng (pickup/tackle)
+- **Effects**: particles, camera shake (2D), ball trail, hiệu ứng GOAL
 - **Audio**: Web Audio API tones cho actions
 
 ## Test
 
 ```bash
 cd test
-node run.js           # Test balance AI
-node test_controls.js # Test điều khiển
-node test_difficulty.js # Test độ khó
-node test_walls.js    # Test vật lý bóng
-node test_match_end.js # Test kết thúc trận
+node run.js              # Test balance AI (node console)
+node test_controls.js    # Test điều khiển
+node test_difficulty.js  # Test độ khó
+node test_walls.js       # Test vật lý bóng
+node test_match_end.js   # Test kết thúc trận
+node test_ai_behavior.js # Test hành vi AI
+
+# Test 3D end-to-end (cần Chrome + puppeteer-core, server đang chạy)
+node test_3d_render.js
 ```
+
+`test_3d_render.js` kiểm tra: khởi tạo WebGL, đủ 6 cầu thủ 3D với đầy đủ chân tay, camera nằm sau lưng
+cầu thủ, camera toàn cảnh bao trọn sân, phím `C` đổi góc nhìn, animation chạy/sút/ăn mừng thay đổi
+tư thế, di chuyển theo hướng camera, khung hình không trống và không có lỗi JS.
+Ảnh chụp được lưu vào `test/screenshots/3d_third_person.png` và `test/screenshots/3d_wide_camera.png`.
