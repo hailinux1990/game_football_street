@@ -22,14 +22,17 @@ với **cầu thủ có đầy đủ chân tay** (mô hình humanoid phân khúc
   thấy cả 6 cầu thủ, khung thành và bóng.
 - **Sân 3D**: mặt sân cỏ nhân tạo có vạch kẻ, tường bê tông graffiti, khung thành + lưới, cột đèn pha,
   bảng hiệu, nón tập, băng ghế dự bị; đèn pha đổ bóng (chất lượng Cao).
-- **Bóng 3D**: lăn theo vận tốc, nảy nhẹ khi bị sút, vòng sáng dưới chân bóng cho dễ thấy.
+- **Bóng 3D**: lăn theo vận tốc, nảy nhẹ khi bị sút, vòng sáng dưới chân bóng cho dễ thấy;
+  bóng bổng bay theo quỹ đạo parabol (không ai chặn được khi bóng còn trên cao).
 
 ## Cách chơi
 
 | Phím | Chức năng |
 |------|-----------|
 | **WASD / Mũi tên** | Di chuyển cầu thủ (theo hướng camera ở góc nhìn người thứ ba) |
-| **Space** | Chuyền bóng cho đồng đội gần nhất |
+| **Space** | Chuyền bóng ngắn (khi có bóng) / **TRANH BÓNG** (khi không có bóng) |
+| **R** | **Chọc khe** — chuyền sệt vào khoảng trống phía trước đồng đội đang chạy |
+| **T** | **Chuyền bóng bổng** — bóng bay cao qua đầu hàng phòng ngự |
 | **F** | Sút bóng vào khung thành |
 | **E** | Kỹ năng đặc biệt (dash nhanh, tốn 25 thể lực) |
 | **Shift** | Chạy nhanh (tốn thể lực) |
@@ -63,7 +66,9 @@ Nếu trình duyệt không hỗ trợ WebGL, game tự động quay về chế 
 - **NPC thông minh**:
   - Đồng đội **chạy chỗ tạo khoảng trống** để nhận đường chuyền khi đội có bóng (support run)
   - Khi mất bóng, NPC **tự động lùi về đội hình phòng thủ** (defensive fallback)
-  - **Tự động chuyển quyền điều khiển** sang cầu thủ gần bóng nhất khi đối phương giữ bóng
+  - **Tự động chuyển quyền điều khiển** (mũi tên vàng) sang cầu thủ gần bóng nhất ngay khi bị đối phương
+    cướp bóng — không cần bấm `Q`
+  - **Nút chuyền ngắn = nút tranh bóng**: khi không có bóng, bấm `Space` (hoặc `✕`) để lao vào áp sát/xoạc bóng
   - AI chuyền bóng thông minh: ưu tiên đồng đội phía trước, thoáng, đang chạy chỗ
 - **Thủ môn** bắt góc, bay người theo hướng bóng
 - **Sân đường phố**: tường bao quanh, bóng nảy tường
@@ -73,7 +78,9 @@ Nếu trình duyệt không hỗ trợ WebGL, game tự động quay về chế 
 | Nút PS5 | Chức năng |
 |---------|-----------|
 | **Cần trái / D-pad** | Di chuyển cầu thủ |
-| **✕ Cross** | Chuyền bóng |
+| **✕ Cross** | Chuyền ngắn / Tranh bóng |
+| **L1** | Chọc khe |
+| **R1** | Chuyền bóng bổng |
 | **□ Square** | Sút bóng |
 | **○ Circle** | Kỹ năng |
 | **△ Triangle** | Đổi cầu thủ |

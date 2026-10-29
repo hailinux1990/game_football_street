@@ -621,9 +621,10 @@
 
         update(dt, ball) {
             const speed = ball.vel.mag() * 60;   // units/giây
+            const airH = ball.height || 0;       // độ cao bóng bổng (world units)
 
             // Cú sút/chuyền: bóng nảy nhẹ lên (chỉ để nhìn, không ảnh hưởng gameplay)
-            if (speed - this.prevSpeed > 240) {
+            if (airH <= 0 && speed - this.prevSpeed > 240) {
                 this.hopVel = Math.max(this.hopVel, 120);
             }
             this.prevSpeed = speed;
@@ -634,7 +635,17 @@
                 if (this.hop <= 0) { this.hop = 0; this.hopVel = 0; }
             }
 
-            this.group.position.set(ball.pos.x, this.radius + this.hop, ball.pos.y);
+            // Bóng bổng: nhấc bóng lên theo độ cao + bóng to hơn một chút cho dễ nhìn
+            const y = this.radius + this.hop + airH * 0.8;
+            this.group.position.set(ball.pos.x, y, ball.pos.y);
+            const scale = 1 + Math.min(airH, 90) / 300;
+            this.group.scale.setScalar(scale);
+
+            // vệt sáng dưới chân bóng: giữ trên mặt sân và mờ dần khi bóng lên cao
+            if (this.ring) {
+                this.ring.visible = airH < 8;
+                this.ring.position.y = 0.12 - (y - this.radius) / scale;
+            }
 
             // Lăn theo vận tốc
             if (speed > 6) {

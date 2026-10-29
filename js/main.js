@@ -26,6 +26,9 @@ class Game {
         this.ball.hasPhysics = true;
         this.ball.isBall = true;
         this.ball.owner = null;
+        // Độ cao bóng (dùng cho chuyền bóng bổng): 0 = trên mặt sân
+        this.ball.height = 0;
+        this.ball.heightVel = 0;
 
         this.players = [];
         this.teamPlayers = { red: [], blue: [] };
@@ -133,12 +136,15 @@ class Game {
         this.ball.vel = new Vector2(0, 0);
         this.ball.owner = null;
         this.ball.hasPhysics = true;
+        this.ball.height = 0;
+        this.ball.heightVel = 0;
 
         // Reset timers
         for (const p of this.players) {
             p.hasBall = false;
             p.ballProtectTimer = 0;
             p.tackleCooldown = 0;
+            p.tacklePressCd = 0;
             p.stamina = p.maxStamina;
         }
     }
@@ -224,6 +230,8 @@ class Game {
                 // Ball stuck for 4 seconds - reset to center
                 this.ball.pos = new Vector2(this.field.x + this.field.width / 2, this.field.y + this.field.height / 2);
                 this.ball.vel = new Vector2(0, 0);
+                this.ball.height = 0;
+                this.ball.heightVel = 0;
                 this.ball.owner = null;
                 for (const p of this.players) { p.hasBall = false; p.passCooldown = 0.5; }
                 this._stallTimer = 0;
@@ -304,8 +312,19 @@ class Game {
         }
 
         // --- Actions (theo key binding) ---
+        // Nút chuyền ngắn: CÓ bóng → chuyền bóng | KHÔNG có bóng → tranh bóng (áp sát, xoạc bóng)
         if (this.input.isActionPressed('pass')) {
-            this.tryPass();
+            if (p.hasBall) this.tryPass();
+            else this.tryTackle();
+        }
+        // Chọc khe: đường chuyền sệt vào khoảng trống phía trước đồng đội đang chạy
+        if (this.input.isActionPressed('throughPass')) {
+            if (p.hasBall) this.tryThroughPass();
+            else this.tryTackle();
+        }
+        // Chuyền bóng bổng: bóng bay cao qua đầu đối phương
+        if (this.input.isActionPressed('loftPass')) {
+            if (p.hasBall) this.tryLoftPass();
         }
         if (this.input.isActionPressed('shoot')) {
             this.tryShoot();
@@ -353,12 +372,169 @@ class Game {
         const angle = Math.atan2(best.pos.y - p.pos.y, best.pos.x - p.pos.x);
         this.ball.vel = Vector2.fromAngle(angle, 16);
         this.ball.hasPhysics = true;
+        this.ball.height = 0;
+        this.ball.heightVel = 0;
         p.hasBall = false;
         p.passCooldown = 0.35;
         p.setAction('pass', 0.32);
         this.ball.owner = null;
         this.audio.playTone(400, 0.08, 'sine', 0.1);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#fff', 5, { speed: 3 });
+    }
+
+    // ===== CHỌC KHE: đường chuyền sệt vào khoảng trống phía trước đồng đội =====
+    tryThroughPass() {
+        const p = this.currentControlledPlayer;
+        if (!p || !p.hasBall) return;
+        const mates = p.teamMates.filter(m => m.active && m.role !== Role.GK);
+        if (mates.length === 0) { this.tryPass(); return; }
+
+        const f = this.field;
+        const dir = p.team === 'red' ? 1 : -1;
+
+        let best = null, bestScore = -Infinity;
+        for (const m of mates) {
+            const d = p.pos.dist(m.pos);
+            if (d < 40) continue;
+            const ahead = (m.pos.x - p.pos.x) * dir;           // người nhận đang ở phía trước
+            const laneX = m.pos.x + dir * 95;                  // điểm bóng sẽ được đẩy tới
+            let space = Infinity;
+            for (const o of p.opponents) {
+                if (!o.active) continue;
+                const od = Math.hypot(o.pos.x - laneX, o.pos.y - m.pos.y);
+                if (od < space) space = od;
+            }
+            const score = ahead * 0.9 + Math.min(space, 200) * 1.15 - d * 0.35
+                + (m.role === Role.FWD ? 40 : 0);
+            if (score > bestScore) { bestScore = score; best = m; }
+        }
+        if (!best) { this.tryPass(); return; }
+
+        // Điểm rơi: khoảng trống phía trước người nhận (lead pass) để họ chạy tới nhận
+        const midY = f.y + f.height / 2;
+        let tx = best.pos.x + dir * 95;
+        let ty = best.pos.y + (best.pos.y - midY) * 0.12;
+        tx = Math.max(f.x + 20, Math.min(f.x + f.width - 20, tx));
+        ty = Math.max(f.y + 20, Math.min(f.y + f.height - 20, ty));
+
+        const angle = Math.atan2(ty - p.pos.y, tx - p.pos.x);
+        this.ball.vel = Vector2.fromAngle(angle, 20);
+        this.ball.hasPhysics = true;
+        this.ball.height = 0;
+        this.ball.heightVel = 0;
+        p.hasBall = false;
+        p.passCooldown = 0.32;
+        p.setAction('pass', 0.3);
+        this.ball.owner = null;
+        this.audio.playTone(520, 0.08, 'triangle', 0.1);
+        this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#7cf3ff', 6, { speed: 4 });
+    }
+
+    // ===== CHUYỀN BÓNG BỔNG: bóng bay cao qua đầu hàng phòng ngự =====
+    tryLoftPass() {
+        const p = this.currentControlledPlayer;
+        if (!p || !p.hasBall) return;
+        const mates = p.teamMates.filter(m => m.active && m.role !== Role.GK);
+        if (mates.length === 0) { this.tryPass(); return; }
+
+        const dir = p.team === 'red' ? 1 : -1;
+        let best = mates[0], bestScore = -Infinity;
+        for (const m of mates) {
+            const d = p.pos.dist(m.pos);
+            if (d < 45) continue;
+            const ahead = (m.pos.x - p.pos.x) * dir;
+            let space = Infinity;
+            for (const o of p.opponents) {
+                if (!o.active) continue;
+                const od = m.pos.dist(o.pos);
+                if (od < space) space = od;
+            }
+            const score = ahead * 0.8 + Math.min(space, 220) * 1.0 + d * 0.15;
+            if (score > bestScore) { bestScore = score; best = m; }
+        }
+
+        const angle = Math.atan2(best.pos.y - p.pos.y, best.pos.x - p.pos.x);
+        this.ball.vel = Vector2.fromAngle(angle, 14);
+        this.ball.hasPhysics = true;
+        this.ball.height = Math.max(2, this.ball.height || 0);
+        this.ball.heightVel = 9.2;      // độ cao ban đầu của quỹ đạo bóng bay
+        p.hasBall = false;
+        p.passCooldown = 0.38;
+        p.setAction('pass', 0.4);
+        this.ball.owner = null;
+        this.audio.playTone(660, 0.12, 'sine', 0.1);
+        this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#a8ffce', 8, { speed: 4 });
+    }
+
+    // ===== TRANH BÓNG (dùng chung nút với chuyền ngắn) =====
+    // Có bóng → chuyền. Không có bóng → lao tới áp sát / xoạc bóng để đoạt lại bóng.
+    tryTackle() {
+        const p = this.currentControlledPlayer;
+        if (!p || !p.active || p.hasBall) return;
+        if ((p.tacklePressCd || 0) > 0) return;
+
+        p.tacklePressCd = 0.4;
+        p.setAction('tackle', 0.42);
+        if (p.stamina > 8) p.stamina = Math.max(0, p.stamina - 6);
+
+        const ball = this.ball;
+        const oppOwner = (ball.owner && ball.owner.active && ball.owner.team !== p.team) ? ball.owner : null;
+
+        // Hướng lao tới: ưu tiên người đang giữ bóng, nếu bóng tự do thì lao về phía bóng
+        const targetX = oppOwner ? oppOwner.pos.x : ball.pos.x;
+        const targetY = oppOwner ? oppOwner.pos.y : ball.pos.y;
+        const ang = Math.atan2(targetY - p.pos.y, targetX - p.pos.x);
+        const lunge = p.stamina > 25 ? 26 : 18;
+        p.pos.x += Math.cos(ang) * lunge;
+        p.pos.y += Math.sin(ang) * lunge;
+        this.clampPlayerToField(p);
+        this.particles.emit(p.pos.x, p.pos.y, '#ffd700', 6, { speed: 4 });
+
+        // A) Bóng tự do (vừa bị cướp / bật ra khỏi chân) → ôm bóng nếu tới được
+        if (!ball.owner) {
+            const near = p.pos.dist(ball.pos) < p.radius + ball.radius + 22;
+            if (near && (ball.height || 0) <= 24) {
+                p.hasBall = true;
+                p.ballProtectTimer = 0.25;
+                ball.owner = p;
+                ball.pos = p.pos.clone();
+                ball.vel = new Vector2(0, 0);
+                ball.height = 0;
+                ball.heightVel = 0;
+                this.audio.playTone(340, 0.07, 'square', 0.08);
+            }
+            return;
+        }
+
+        if (!oppOwner) return;                      // đồng đội đang giữ bóng → không tranh
+        if (oppOwner.ballProtectTimer > 0) return;  // đối thủ đang che bóng
+
+        // B) Đối thủ đang giữ bóng → xoạc bóng nếu vào tầm
+        const d = p.pos.dist(oppOwner.pos);
+        if (d > p.radius + oppOwner.radius + 24) return;
+
+        let chance = p.role === Role.DEF ? 0.85 : (p.role === Role.MID ? 0.72 : 0.6);
+        if (p === this.currentControlledPlayer) chance += 0.1;
+        if (Math.random() > chance) {
+            // Xoạc hụt → đối thủ vẫn giữ bóng, phải chờ hồi chiêu
+            p.tacklePressCd = 0.55;
+            this.audio.playTone(180, 0.06, 'sawtooth', 0.06);
+            return;
+        }
+
+        oppOwner.hasBall = false;
+        oppOwner.ballProtectTimer = 0;
+        oppOwner.ballStolenCooldown = 0.8;
+        p.hasBall = true;
+        p.ballProtectTimer = 0.45;
+        ball.owner = p;
+        ball.pos = p.pos.clone();
+        ball.vel = new Vector2(0, 0);
+        ball.height = 0;
+        ball.heightVel = 0;
+        this.particles.emitBurst(p.pos.x, p.pos.y, '#ffd700', 10);
+        this.audio.playTone(420, 0.1, 'square', 0.12);
+        this.camera.shake(3, 0.15);
     }
 
     tryShoot() {
@@ -383,6 +559,8 @@ class Game {
 
         this.ball.vel = Vector2.fromAngle(angle, 26);
         this.ball.hasPhysics = true;
+        this.ball.height = 0;
+        this.ball.heightVel = 0;
         p.hasBall = false;
         p.passCooldown = 0.35;
         p.setAction('kick', 0.5);
@@ -458,7 +636,21 @@ class Game {
         player.isControlled = true;
         player.aiControlled = false;
         this.currentControlledPlayer = player;
+        // Hiệu ứng vàng đánh dấu mũi tên vừa nhảy sang cầu thủ mới
         this.particles.emit(player.pos.x, player.pos.y, '#ffd700', 5, { speed: 3 });
+        this.particles.emit(player.pos.x, player.pos.y, '#ffd700', 6, { speed: 6, angle: -Math.PI / 2 });
+    }
+
+    // Cầu thủ gần điểm (x,y) nhất của đội team, bỏ qua thủ môn
+    nearestTeammateTo(team, pos, exclude) {
+        let nearest = null, nearestDist = Infinity;
+        for (const p of this.teamPlayers[team]) {
+            if (!p.active || p === exclude) continue;
+            if (p.role === Role.GK) continue;   // thủ môn không auto-switch
+            const d = p.pos.dist(pos);
+            if (d < nearestDist) { nearestDist = d; nearest = p; }
+        }
+        return nearest ? { player: nearest, dist: nearestDist } : null;
     }
 
     updateControl(dt) {
@@ -478,24 +670,34 @@ class Game {
             return;
         }
 
-        // B) Đối phương giữ bóng → tự chuyển sang cầu thủ gần bóng nhất để tranh
+        // B) ĐỐI PHƯƠNG cướp bóng → mũi tên vàng TỰ ĐỘNG nhảy sang cầu thủ gần bóng nhất
+        //    để tranh bóng, không cần bấm Q.
         if (owner && owner.active && owner.team !== cp.team) {
             if (this._autoSwitchCd > 0) return;
 
-            let nearest = null, nearestDist = Infinity;
+            // Xét toàn đội (kể cả người đang điều khiển) để chọn đúng người gần nhất
+            let nearest = null, nearestDist = cp.pos.dist(owner.pos);
             for (const p of this.teamPlayers[cp.team]) {
-                if (!p.active || p === cp) continue;
-                if (p.role === Role.GK) continue;   // không auto-switch sang thủ môn
+                if (!p.active || p.role === Role.GK) continue;
                 const d = p.pos.dist(owner.pos);
-                if (d < nearestDist) { nearestDist = d; nearest = p; }
+                if (d < nearestDist - 10) { nearestDist = d; nearest = p; }
             }
-            if (!nearest) return;
-
-            const curDist = cp.pos.dist(owner.pos);
-            // Chỉ switch khi cầu thủ kia gần hơn đáng kể (tránh nhảy liên tục)
-            if (nearestDist < curDist - 45) {
+            // Người đang điều khiển đã là người gần nhất -> giữ nguyên, chỉ cần bấm nút tranh bóng
+            if (nearest && nearest !== cp) {
                 this.switchControlTo(nearest);
-                this._autoSwitchCd = 0.9;
+                this._autoSwitchCd = 0.55;
+            }
+            return;
+        }
+
+        // C) Bóng tự do (vừa bị cướp bật ra / chuyền hỏng) → nhảy sang người gần bóng nhất
+        //    chỉ khi người đó gần hơn hẳn (tránh mũi tên nhảy loạn giữa các cầu thủ)
+        if (!owner && this.ball.hasPhysics) {
+            if (this._autoSwitchCd > 0) return;
+            const near = this.nearestTeammateTo(cp.team, this.ball.pos, null);
+            if (near && near.player !== cp && near.dist < cp.pos.dist(this.ball.pos) - 80) {
+                this.switchControlTo(near.player);
+                this._autoSwitchCd = 1.0;
             }
         }
     }
@@ -786,6 +988,8 @@ class Game {
 
         // Ball follows its owner
         if (ball.owner && ball.owner.active && ball.owner.hasBall) {
+            ball.height = 0;
+            ball.heightVel = 0;
             if (ball.owner === this.currentControlledPlayer) {
                 return; // Human control handled in handleHumanInput
             }
@@ -805,6 +1009,20 @@ class Game {
             ball.vel.mul(0.985);
             // Gravity-ish wobble
             ball.vel.mul(0.99);
+
+            // --- Độ cao bóng (chuyền bóng bổng): bay theo quỹ đạo parabol rồi rơi xuống ---
+            if (ball.height > 0 || ball.heightVel > 0) {
+                ball.height += ball.heightVel * dt * 60;
+                ball.heightVel -= 0.42 * dt * 60;          // trọng lực
+                if (ball.height <= 0) {
+                    ball.height = 0;
+                    // nảy nhẹ khi chạm đất rồi lăn tiếp
+                    if (ball.heightVel < -2.5) ball.heightVel = -ball.heightVel * 0.35;
+                    else ball.heightVel = 0;
+                    ball.vel.mul(0.92);
+                }
+                if (ball.height > 130) { ball.height = 130; ball.heightVel = 0; }
+            }
 
             // Move
             ball.pos.x += ball.vel.x * dt * 60;
@@ -848,7 +1066,8 @@ class Game {
             }
 
             // Player-ball collision (no owner)
-            if (!ball.owner) {
+            // Bóng đang bay cao (chuyền bổng) thì không ai chạm được
+            if (!ball.owner && ball.height < 24) {
                 for (const p of this.players) {
                     if (!p.active) continue;
                     if (p.passCooldown > 0) continue;
@@ -859,6 +1078,8 @@ class Game {
                             p.hasBall = true;
                             ball.owner = p;
                             ball.vel = new Vector2(0, 0);
+                            ball.height = 0;
+                            ball.heightVel = 0;
                             p.hasBall = true;
                         }
                         break;
@@ -967,6 +1188,8 @@ class Game {
         const inGoalY = Math.abs(b.y - centerY) < goalHalf;
 
         if (!inGoalY) return;
+        // Bóng bay quá cao (vượt xà ngang) thì không tính bàn
+        if ((this.ball.height || 0) > 58) return;
 
         // Right goal → RED scores (Red attacks right)
         if (b.x > f.x + f.width - goalDepth) {
@@ -991,6 +1214,8 @@ class Game {
         // Reset ball immediately to center to prevent multi-scoring
         this.ball.pos = new Vector2(this.field.x + this.field.width / 2, this.field.y + this.field.height / 2);
         this.ball.vel = new Vector2(0, 0);
+        this.ball.height = 0;
+        this.ball.heightVel = 0;
         this.ball.owner = null;
         for (const p of this.players) p.hasBall = false;
 
@@ -1519,40 +1744,46 @@ class Game {
     drawBall(ctx) {
         const b = this.ball;
         const speed = b.vel.mag();
+        // Bóng bổng: nâng bóng lên theo độ cao, bóng to hơn một chút cho dễ thấy
+        const h = b.height || 0;
+        const lift = h * 0.85;
+        const ballCY = b.pos.y - lift;
+        const ballR = b.radius * (1 + Math.min(h, 90) / 260);
 
         // Ball trail when moving fast
         if (speed > 8) {
             for (let i = 1; i <= 4; i++) {
                 const t = i / 5;
                 const tx = b.pos.x - b.vel.x * t * 1.5;
-                const ty = b.pos.y - b.vel.y * t * 1.5;
+                const ty = ballCY - b.vel.y * t * 1.5;
                 ctx.beginPath();
-                ctx.arc(tx, ty, b.radius * (1 - t * 0.5), 0, Math.PI * 2);
+                ctx.arc(tx, ty, ballR * (1 - t * 0.5), 0, Math.PI * 2);
                 ctx.fillStyle = `rgba(255,255,255,${0.3 * (1 - t)})`;
                 ctx.fill();
             }
         }
 
-        // Shadow
+        // Shadow (luôn nằm trên mặt sân, nhỏ & mờ dần khi bóng lên cao)
+        const shadowScale = Math.max(0.4, 1 - h / 160);
         ctx.beginPath();
-        ctx.ellipse(b.pos.x, b.pos.y + 7, 7, 3.5, 0, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.ellipse(b.pos.x, b.pos.y + 7, 7 * shadowScale, 3.5 * shadowScale, 0, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0,0,0,${0.4 * shadowScale})`;
         ctx.fill();
 
         // Ball glow if owned
         if (b.owner) {
             ctx.beginPath();
-            ctx.arc(b.pos.x, b.pos.y, b.radius + 6, 0, Math.PI * 2);
+            ctx.arc(b.pos.x, ballCY, ballR + 6, 0, Math.PI * 2);
             ctx.fillStyle = 'rgba(255, 255, 150, 0.15)';
             ctx.fill();
         }
 
         // Ball body
-        const ballGrad = ctx.createRadialGradient(b.pos.x - 3, b.pos.y - 3, 0, b.pos.x, b.pos.y, b.radius);
+        const ballGrad = ctx.createRadialGradient(b.pos.x - 3, ballCY - 3, 0, b.pos.x, ballCY, ballR);
         ballGrad.addColorStop(0, '#ffffff');
         ballGrad.addColorStop(1, '#d0d0d0');
         ctx.beginPath();
-        ctx.arc(b.pos.x, b.pos.y, b.radius, 0, Math.PI * 2);
+        ctx.arc(b.pos.x, ballCY, ballR, 0, Math.PI * 2);
         ctx.fillStyle = ballGrad;
         ctx.fill();
         ctx.strokeStyle = '#555';
@@ -1561,15 +1792,15 @@ class Game {
 
         // Ball pattern
         ctx.beginPath();
-        ctx.arc(b.pos.x, b.pos.y, b.radius * 0.45, 0, Math.PI * 2);
+        ctx.arc(b.pos.x, ballCY, ballR * 0.45, 0, Math.PI * 2);
         ctx.fillStyle = '#222';
         ctx.fill();
         for (let i = 0; i < 5; i++) {
             const angle = (i / 5) * Math.PI * 2;
             ctx.beginPath();
             ctx.arc(
-                b.pos.x + Math.cos(angle) * b.radius * 0.65,
-                b.pos.y + Math.sin(angle) * b.radius * 0.65,
+                b.pos.x + Math.cos(angle) * ballR * 0.65,
+                ballCY + Math.sin(angle) * ballR * 0.65,
                 1.5, 0, Math.PI * 2
             );
             ctx.fillStyle = '#333';
@@ -1728,7 +1959,7 @@ function initGame() {
     }
 
     // ===== Key binding UI =====
-    const ACTION_ORDER = ['moveUp','moveDown','moveLeft','moveRight','sprint','pass','shoot','skill','switchPlayer','toggleCamera'];
+    const ACTION_ORDER = ['moveUp','moveDown','moveLeft','moveRight','sprint','pass','throughPass','loftPass','shoot','skill','switchPlayer','toggleCamera'];
     let listeningRow = null;
     let listeningAction = null;
 
@@ -1811,13 +2042,15 @@ function initGame() {
         const k = (a) => keyDisplayName(b[a]).replace(/ \(L\)| \(R\)/g, '');
         hint.innerHTML =
             '<span>' + k('moveUp') + k('moveLeft') + k('moveDown') + k('moveRight') + '</span> Di chuyển | ' +
-            '<span>' + k('pass') + '</span> Chuyền | ' +
+            '<span>' + k('pass') + '</span> Chuyền ngắn / Tranh bóng | ' +
+            '<span>' + k('throughPass') + '</span> Chọc khe | ' +
+            '<span>' + k('loftPass') + '</span> Chuyền bổng | ' +
             '<span>' + k('shoot') + '</span> Sút | ' +
             '<span>' + k('skill') + '</span> Kỹ năng | ' +
             '<span>' + k('sprint') + '</span> Chạy nhanh | ' +
             '<span>' + k('switchPlayer') + '</span> Đổi người | ' +
             '<span>' + k('toggleCamera') + '</span> Đổi góc nhìn' +
-            '<br><span>🎮 PS5</span> Cần trái di chuyển · ✕ Chuyền · □ Sút · ○ Kỹ năng · △ Đổi người · R2 Chạy';
+            '<br><span>🎮 PS5</span> Cần trái di chuyển · ✕ Chuyền ngắn/Tranh bóng · L1 Chọc khe · R1 Chuyền bổng · □ Sút · ○ Kỹ năng · △ Đổi người · R2 Chạy';
     }
 
     // Khởi tạo UI keybindings ngay
@@ -1825,7 +2058,7 @@ function initGame() {
     updateControlsHint();
 
     // ===== Gamepad (PS5) UI =====
-    const GP_ACTION_ORDER = ['pass', 'shoot', 'skill', 'switchPlayer', 'sprint'];
+    const GP_ACTION_ORDER = ['pass', 'throughPass', 'loftPass', 'shoot', 'skill', 'switchPlayer', 'sprint'];
     let gpListeningRow = null;
 
     function renderGamepadBindings() {

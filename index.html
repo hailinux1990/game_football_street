@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Street Football 3D - FIFA Street Style</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="style.css?v=20261028b">
+    <link rel="stylesheet" href="style.css?v=20261029c">
 </head>
 <body>
     <div id="game-container">
@@ -23,7 +23,7 @@
                         <button id="btn-credits" class="menu-btn">THÔNG TIN</button>
                     </div>
                     <div class="controls-hint">
-                        <span>WASD</span> Di chuyển | <span>Space</span> Chuyền | <span>F</span> Sút | <span>E</span> Kỹ năng | <span>Shift</span> Chạy nhanh | <span>Q</span> Đổi người | <span>C</span> Đổi góc nhìn
+                        <span>WASD</span> Di chuyển | <span>Space</span> Chuyền ngắn / Tranh bóng | <span>R</span> Chọc khe | <span>T</span> Chuyền bổng | <span>F</span> Sút | <span>E</span> Kỹ năng | <span>Shift</span> Chạy nhanh | <span>Q</span> Đổi người | <span>C</span> Đổi góc nhìn
                     </div>
                     <div class="menu-badge">🕹️ 3D THIRD-PERSON · CAMERA SAU LƯNG CẦU THỦ</div>
                 </div>
@@ -128,18 +128,20 @@
                     <br>
                     <p>Controls:</p>
                     <p>WASD / Mũi tên - Di chuyển cầu thủ</p>
-                    <p>Space - Chuyền bóng cho đồng đội</p>
+                    <p>Space - Chuyền bóng ngắn (khi có bóng) / TRANH BÓNG (khi mất bóng)</p>
+                    <p>R - Chọc khe (chuyền sệt vào khoảng trống phía trước đồng đội)</p>
+                    <p>T - Chuyền bóng bổng (bóng bay cao qua đầu đối phương)</p>
                     <p>F - Sút bóng vào khung thành</p>
                     <p>E - Kỹ năng đặc biệt (khi có bóng)</p>
                     <p>Shift - Chạy nhanh (tốn thể lực)</p>
-                    <p>Q - Chuyển cầu thủ điều khiển</p>
+                    <p>Q - Chuyển cầu thủ điều khiển (mũi tên vàng cũng TỰ ĐỘNG chuyển sang người gần bóng nhất khi bị cướp bóng)</p>
                     <p>C - Đổi góc nhìn (người thứ ba / toàn cảnh)</p>
                     <p>Kéo chuột - xoay camera | Cuộn chuột - zoom</p>
                     <p>ESC - Tạm dừng</p>
                     <br>
                     <p>🎮 Tay cầm PS5 (DualSense):</p>
-                    <p>Cần trái - Di chuyển | ✕ Chuyền | □ Sút</p>
-                    <p>○ Kỹ năng | △ Đổi người | R2 Chạy nhanh</p>
+                    <p>Cần trái - Di chuyển | ✕ Chuyền ngắn / Tranh bóng | L1 Chọc khe | R1 Chuyền bổng</p>
+                    <p>□ Sút | ○ Kỹ năng | △ Đổi người | R2 Chạy nhanh</p>
                     <br>
                     <button id="btn-back-menu-2" class="menu-btn">QUAY LẠI</button>
                 </div>
@@ -210,14 +212,14 @@
     </div>
 
     <script src="js/vendor/three.min.js?v=160"></script>
-    <script src="js/game.js?v=20261028b"></script>
-    <script src="js/entities.js?v=20261028b"></script>
-    <script src="js/field.js?v=20261028b"></script>
-    <script src="js/ai.js?v=20261028b"></script>
-    <script src="js/player_model.js?v=20261028b"></script>
-    <script src="js/render3d.js?v=20261028b"></script>
+    <script src="js/game.js?v=20261029c"></script>
+    <script src="js/entities.js?v=20261029c"></script>
+    <script src="js/field.js?v=20261029c"></script>
+    <script src="js/ai.js?v=20261029c"></script>
+    <script src="js/player_model.js?v=20261029c"></script>
+    <script src="js/render3d.js?v=20261029c"></script>
 
-    <script src="js/ui.js?v=20261028b"></script>
-    <script src="js/main.js?v=20261028b"></script>
+    <script src="js/ui.js?v=20261029c"></script>
+    <script src="js/main.js?v=20261029c"></script>
 </body>
 </html>

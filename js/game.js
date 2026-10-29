@@ -278,7 +278,9 @@ const DEFAULT_KEY_BINDINGS = {
     moveLeft: 'KeyA',
     moveRight: 'KeyD',
     sprint: 'ShiftLeft',
-    pass: 'Space',
+    pass: 'Space',          // Chuyền ngắn — và TRANH BÓNG khi không có bóng
+    throughPass: 'KeyR',    // Chọc khe
+    loftPass: 'KeyT',       // Chuyền bóng bổng
     shoot: 'KeyF',
     skill: 'KeyE',
     switchPlayer: 'KeyQ',
@@ -291,7 +293,9 @@ const KEY_BINDING_LABELS = {
     moveLeft: 'Di chuyển trái',
     moveRight: 'Di chuyển phải',
     sprint: 'Chạy nhanh',
-    pass: 'Chuyền bóng',
+    pass: 'Chuyền ngắn / Tranh bóng',
+    throughPass: 'Chọc khe',
+    loftPass: 'Chuyền bóng bổng',
     shoot: 'Sút bóng',
     skill: 'Kỹ năng',
     switchPlayer: 'Đổi cầu thủ',
@@ -326,10 +330,12 @@ function keyDisplayName(code) {
 // 0=✕ Cross, 1=○ Circle, 2=□ Square, 3=△ Triangle, 4=L1, 5=R1, 6=L2, 7=R2,
 // 8=Create, 9=Options, 10=L3, 11=R3, 12=D-pad Up, 13=D-pad Down, 14=D-pad Left, 15=D-pad Right, 16=PS, 17=Touchpad
 const DEFAULT_GAMEPAD_BINDINGS = {
-    pass: 0,          // ✕
+    pass: 0,          // ✕  = chuyền ngắn + tranh bóng
     shoot: 2,         // □
     skill: 1,         // ○
     switchPlayer: 3,  // △
+    throughPass: 4,   // L1 = chọc khe
+    loftPass: 5,      // R1 = chuyền bóng bổng
     sprint: 7         // R2
 };
 

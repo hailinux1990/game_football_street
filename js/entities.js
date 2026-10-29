@@ -12,6 +12,7 @@ class Player extends Entity {
         this.ballStolenCooldown = 0;
         this.ballProtectTimer = 0;
         this.tackleCooldown = 0;
+        this.tacklePressCd = 0;   // hồi chiêu của pha tranh bóng chủ động (nút chuyền ngắn)
         this.aiState = 'idle';
         this.aiTarget = new Vector2(0, 0);
         this.aiStateTime = 0;
@@ -69,6 +70,7 @@ class Player extends Entity {
         this.ballStolenCooldown = Math.max(0, (this.ballStolenCooldown || 0) - dt);
         this.ballProtectTimer = Math.max(0, (this.ballProtectTimer || 0) - dt);
         this.tackleCooldown = Math.max(0, (this.tackleCooldown || 0) - dt);
+        this.tacklePressCd = Math.max(0, (this.tacklePressCd || 0) - dt);
         this.tickAction(dt);
     }
 
