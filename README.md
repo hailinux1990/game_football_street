@@ -24,6 +24,15 @@ với **cầu thủ có đầy đủ chân tay** (mô hình humanoid phân khúc
   bảng hiệu, nón tập, băng ghế dự bị; đèn pha đổ bóng (chất lượng Cao).
 - **Bóng 3D**: lăn theo vận tốc, nảy nhẹ khi bị sút, vòng sáng dưới chân bóng cho dễ thấy;
   bóng bổng bay theo quỹ đạo parabol (không ai chặn được khi bóng còn trên cao).
+- **🔊 Tiếng chạm bóng thật (tổng hợp bằng WebAudio)**: mỗi pha chạm bóng có âm riêng —
+  cảm giác bóng (touch), chuyền ngắn (pass), **chọc khe** (through), **chuyền bổng** (loft),
+  **sút** (shoot, mạnh và đanh nhất), **tranh bóng** (tackle), thủ môn phá bóng (gk).
+  Ngoài ra: **bóng đập cột dọc** ("keng" kim loại cao), **đập xà ngang** ("keng" trầm dày),
+  **lưới rung** khi vào bàn, và tiếng "thịch" khi bóng đập tường bao.
+- **Khung thành chuẩn FIFA**: cột tròn trắng có đế, xà ngang nối khớp cầu, khung sau gồm trụ + thanh
+  chống chéo, **lưới 3 mặt căng có võng nhẹ** (sau / trên dốc / hai hông hình thang) và vạch khung thành
+  trên mặt sân. Khẩu độ 80, **xà ngang cao 45% khẩu độ**, sâu 34 — bóng bay **quá xà không tính bàn**,
+  bóng đập **cột/xà dội ra kèm âm thanh** (không vào lưới).
 
 ## Cách chơi
 

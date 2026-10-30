@@ -233,6 +233,7 @@ class AudioManager {
             this.masterGain = this.context.createGain();
             this.masterGain.connect(this.context.destination);
             this.masterGain.gain.value = 0.5;
+            this.initNoise();
             this.initCrowd();
         } catch (e) {
             console.warn('Audio not supported');
@@ -329,7 +330,156 @@ class AudioManager {
         osc.stop(this.context.currentTime + duration);
     }
 
-    playKick() { this.playTone(120, 0.1, 'square', 0.15); }
+    // ===== Âm thanh va chạm bóng (tiếng "bụp" từ chân cầu thủ) =====
+    initNoise() {
+        if (!this.context || this._noiseBuf) return;
+        if (typeof this.context.createBuffer !== 'function') return;
+        const sr = this.context.sampleRate;
+        const len = Math.floor(sr * 0.6);
+        const buf = this.context.createBuffer(1, len, sr);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1);
+        this._noiseBuf = buf;
+    }
+
+    // Một nhúm nhiễu qua bandpass: tiếng "chạm" da bóng
+    noiseHit(duration, freq, q, gain) {
+        if (!this.enabled || !this.context) return;
+        if (!this._noiseBuf) this.initNoise();
+        if (!this._noiseBuf) return;
+        const t = this.context.currentTime;
+        const src = this.context.createBufferSource();
+        src.buffer = this._noiseBuf;
+        const band = this.context.createBiquadFilter();
+        band.type = 'bandpass';
+        band.frequency.value = freq || 1600;
+        band.Q.value = q || 1.1;
+        const g = this.context.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(gain || 0.1, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + (duration || 0.07));
+        src.connect(band);
+        band.connect(g);
+        g.connect(this.masterGain);
+        try { src.start(t); src.stop(t + (duration || 0.07) + 0.02); } catch (e) { /* ignore */ }
+    }
+
+    // Cú chạm bóng: "bụp" trầm (osc) + "bép" da bóng (noise), khác nhau theo kiểu chạm
+    // kind: 'touch' | 'pass' | 'through' | 'loft' | 'shoot' | 'tackle' | 'gk' | 'head'
+    ballImpact(kind, power) {
+        if (!this.enabled || !this.context) return;
+        const kinds = {
+            touch:   { f0: 150, f1: 72, dur: 0.07, nf: 1500, nq: 1.0, gain: 0.070, noise: 0.045 },
+            pass:    { f0: 195, f1: 88, dur: 0.09, nf: 1800, nq: 1.15, gain: 0.125, noise: 0.075 },
+            through: { f0: 215, f1: 95, dur: 0.08, nf: 2250, nq: 1.35, gain: 0.130, noise: 0.085 },
+            loft:    { f0: 165, f1: 78, dur: 0.11, nf: 2450, nq: 0.90, gain: 0.110, noise: 0.065 },
+            shoot:   { f0: 245, f1: 58, dur: 0.13, nf: 2700, nq: 1.25, gain: 0.205, noise: 0.135 },
+            tackle:  { f0: 130, f1: 52, dur: 0.10, nf: 1150, nq: 0.80, gain: 0.160, noise: 0.115 },
+            gk:      { f0: 205, f1: 92, dur: 0.09, nf: 1600, nq: 1.05, gain: 0.120, noise: 0.075 },
+            head:    { f0: 185, f1: 85, dur: 0.08, nf: 2100, nq: 1.10, gain: 0.115, noise: 0.070 }
+        };
+        const c = kinds[kind] || kinds.pass;
+        const p = Math.max(0.15, Math.min(1.4, power == null ? 0.9 : power));
+        const t = this.context.currentTime;
+
+        // 1) thân tiếng: sóng trầm rơi nhanh
+        const osc = this.context.createOscillator();
+        const g = this.context.createGain();
+        osc.type = kind === 'shoot' ? 'triangle' : 'sine';
+        osc.frequency.setValueAtTime(c.f0 * (0.94 + Math.random() * 0.12), t);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(30, c.f1), t + c.dur);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(c.gain * p, t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + c.dur * 1.35);
+        osc.connect(g);
+        g.connect(this.masterGain);
+        try { osc.start(t); osc.stop(t + c.dur * 1.6); } catch (e) { /* ignore */ }
+
+        // 2) tiếng da bóng
+        this.noiseHit(c.dur * 0.9, c.nf, c.nq, c.noise * p);
+
+        // 3) sút mạnh: thêm tiếng "vút" nhẹ
+        if (kind === 'shoot' && p > 0.6) {
+            this.noiseHit(0.16, 5200, 0.6, 0.035 * p);
+        }
+    }
+
+    // Bóng đập CỘT DỌC: tiếng kim loại "keng"
+    playPost() {
+        if (!this.enabled || !this.context) return;
+        const t = this.context.currentTime;
+        [1180, 2400, 3650].forEach((f, i) => {
+            const osc = this.context.createOscillator();
+            const g = this.context.createGain();
+            osc.type = 'triangle';
+            osc.frequency.value = f * (0.97 + Math.random() * 0.06);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(0.15 / (i + 1.2), t + 0.004);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.30 + i * 0.14);
+            osc.connect(g);
+            g.connect(this.masterGain);
+            try { osc.start(t); osc.stop(t + 0.8); } catch (e) { /* ignore */ }
+        });
+        this.noiseHit(0.05, 2600, 3.0, 0.09);
+    }
+
+    // Bóng đập XÀ NGANG: "keng" trầm và dày hơn cột dọc
+    playCrossbar() {
+        if (!this.enabled || !this.context) return;
+        const t = this.context.currentTime;
+        [430, 815, 1560, 2480].forEach((f, i) => {
+            const osc = this.context.createOscillator();
+            const g = this.context.createGain();
+            osc.type = 'triangle';
+            osc.frequency.value = f * (0.98 + Math.random() * 0.04);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(0.17 / (i + 1.3), t + 0.006);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42 + i * 0.16);
+            osc.connect(g);
+            g.connect(this.masterGain);
+            try { osc.start(t); osc.stop(t + 1.0); } catch (e) { /* ignore */ }
+        });
+        this.noiseHit(0.07, 1500, 2.2, 0.10);
+    }
+
+    // Lưới rung khi bóng vào: tiếng "sột soạt"
+    playNet() {
+        if (!this.enabled || !this.context || !this._noiseBuf) return;
+        const t = this.context.currentTime;
+        const src = this.context.createBufferSource();
+        src.buffer = this._noiseBuf;
+        const band = this.context.createBiquadFilter();
+        band.type = 'bandpass';
+        band.frequency.setValueAtTime(2600, t);
+        band.frequency.exponentialRampToValueAtTime(900, t + 0.35);
+        band.Q.value = 0.9;
+        const g = this.context.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.12, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+        src.connect(band); band.connect(g); g.connect(this.masterGain);
+        try { src.start(t); src.stop(t + 0.5); } catch (e) { /* ignore */ }
+    }
+
+    // Bóng đập tường bao: tiếng "thịch" trầm
+    playWall() {
+        if (!this.enabled || !this.context) return;
+        const t = this.context.currentTime;
+        const osc = this.context.createOscillator();
+        const g = this.context.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, t);
+        osc.frequency.exponentialRampToValueAtTime(52, t + 0.14);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.10, t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+        osc.connect(g); g.connect(this.masterGain);
+        try { osc.start(t); osc.stop(t + 0.24); } catch (e) { /* ignore */ }
+        this.noiseHit(0.09, 620, 1.1, 0.075);
+    }
+
+    // Tương thích code cũ
+    playKick() { this.ballImpact('shoot', 1); }
 
     // Tiếng còi trọng tài (rít, cao)
     blareWhistle(duration, volume) {
@@ -384,7 +534,7 @@ class AudioManager {
     }
     playWhistle() { this.playTone(800, 0.3, 'sine', 0.15); }
     playSkill() { this.playTone(300, 0.15, 'sawtooth', 0.1); }
-    playHit() { this.playTone(200, 0.05, 'noise', 0.1); }
+    playHit() { this.noiseHit(0.06, 1800, 1.2, 0.08); }
 }
 
 // Default key bindings (có thể tùy chỉnh trong Settings)

@@ -32,6 +32,12 @@ class Game {
         this.field = new Field(60, 80, 800, 500);
         this.goalWidth = 80;
         this.goalHeight = 80;
+        // Khung thành: khẩu độ 80 (theo trục dọc sân), xà ngang cao ~0.45 khẩu độ (tỉ lệ gần chuẩn FIFA)
+        this.goalBarHeight = Math.round(this.goalHeight * 0.45);
+        this.goalDepth = 34;
+        this.goalPostRadius = 2.1;
+        this._barHitCd = 0;
+        this._goalBlockTimer = 0;   // chặn tính bàn ngay sau khi bóng đập cột/xà
 
         // Ball
         this.ball = new Entity(460, 330, 8, 'white');
@@ -687,7 +693,7 @@ class Game {
         p.passCooldown = 0.35;
         p.setAction('pass', 0.32);
         this.ball.owner = null;
-        this.audio.playTone(400, 0.08, 'sine', 0.1);
+        this.audio.ballImpact('pass', 0.85);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#fff', 5, { speed: 3 });
     }
 
@@ -735,7 +741,7 @@ class Game {
         p.passCooldown = 0.32;
         p.setAction('pass', 0.3);
         this.ball.owner = null;
-        this.audio.playTone(520, 0.08, 'triangle', 0.1);
+        this.audio.ballImpact('through', 0.95);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#7cf3ff', 6, { speed: 4 });
     }
 
@@ -771,7 +777,7 @@ class Game {
         p.passCooldown = 0.38;
         p.setAction('pass', 0.4);
         this.ball.owner = null;
-        this.audio.playTone(660, 0.12, 'sine', 0.1);
+        this.audio.ballImpact('loft', 1.0);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#a8ffce', 8, { speed: 4 });
     }
 
@@ -810,7 +816,7 @@ class Game {
                 ball.vel = new Vector2(0, 0);
                 ball.height = 0;
                 ball.heightVel = 0;
-                this.audio.playTone(340, 0.07, 'square', 0.08);
+                this.audio.ballImpact('touch', 0.8);
             }
             return;
         }
@@ -827,7 +833,7 @@ class Game {
         if (Math.random() > chance) {
             // Xoạc hụt → đối thủ vẫn giữ bóng, phải chờ hồi chiêu
             p.tacklePressCd = 0.55;
-            this.audio.playTone(180, 0.06, 'sawtooth', 0.06);
+            this.audio.ballImpact('touch', 0.55);
             return;
         }
 
@@ -842,7 +848,7 @@ class Game {
         ball.height = 0;
         ball.heightVel = 0;
         this.particles.emitBurst(p.pos.x, p.pos.y, '#ffd700', 10);
-        this.audio.playTone(420, 0.1, 'square', 0.12);
+        this.audio.ballImpact('tackle', 1.05);
         this.camera.shake(3, 0.15);
     }
 
@@ -875,7 +881,7 @@ class Game {
         p.setAction('kick', 0.5);
         this._lastShooter = p;
         this.ball.owner = null;
-        this.audio.playTone(150, 0.15, 'square', 0.15);
+        this.audio.ballImpact('shoot', 1.25);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#ffdd00', 8, { speed: 5 });
         this.camera.shake(5, 0.2);
     }
@@ -1053,6 +1059,7 @@ class Game {
                 if (p.gkKickCd <= 0) {
                     const dir = isRed ? 0 : Math.PI;
                     this.ball.vel = Vector2.fromAngle(dir + (Math.random() - 0.5) * 0.5, 20);
+                    this.audio.ballImpact('gk', 0.95);
                     this.ball.owner = null;
                     p.hasBall = false;
                     p.passCooldown = 0.4;
@@ -1101,6 +1108,7 @@ class Game {
                 }
                 const angle = Math.atan2(aimY - p.pos.y, goalX - p.pos.x);
                 this.ball.vel = Vector2.fromAngle(angle, 24);
+                this.audio.ballImpact('shoot', 1.0);
                 this.ball.owner = null;
                 p.hasBall = false;
                 p.passCooldown = 0.35;
@@ -1130,6 +1138,7 @@ class Game {
                 const dir = p.team === 'red' ? 0 : Math.PI;
                 const ang = dir + (Math.random() - 0.5) * 0.7;
                 this.ball.vel = Vector2.fromAngle(ang, 22);
+                this.audio.ballImpact('loft', 0.8);
                 this.ball.hasPhysics = true;
                 this.ball.height = 0; this.ball.heightVel = 0;
                 this.ball.owner = null;
@@ -1258,7 +1267,7 @@ class Game {
         p.passCooldown = 0.3;
         p.setAction('pass', 0.3);
         p.aiDecisionCd = 0.25;
-        this.audio.playTone(380 + Math.random() * 60, 0.06, 'sine', 0.07);
+        this.audio.ballImpact(loft ? 'loft' : 'pass', 0.7);
     }
 
     // ----- Đồng đội có bóng: chạy chỗ tạo khoảng trống để nhận chuyền -----
@@ -1445,6 +1454,9 @@ class Game {
                 ball.vel = new Vector2(0, 0);
             }
 
+            // ===== CỘT DỌC & XÀ NGANG (khung thành) =====
+            this.checkGoalFrame(dt);
+
             // Wall collisions
             const f = this.field;
             const margin = 6;
@@ -1453,29 +1465,45 @@ class Game {
 
             // Check if within goal vertical range
             const inGoalY = Math.abs(ball.pos.y - leftGoalY) < goalHalf;
+            // Bóng bay cao hơn xà ngang thì coi như đập vào tường phía trên khung thành
+            // (vẫn bật lại, không bay ra ngoài sân)
+            const barHH = this.goalBarHeight || Math.round(this.goalHeight * 0.45);
+            const overBar = (ball.height || 0) * 0.8 > barHH - ball.radius * 0.5;
 
             // Left/Right walls (bounce unless in goal area)
+            this._wallSoundCd = Math.max(0, (this._wallSoundCd || 0) - dt);
             if (ball.pos.x < f.x + margin) {
-                if (!inGoalY) {
+                if (!inGoalY || overBar) {
                     ball.pos.x = f.x + margin;
+                    this.bounceWallSound(ball, 'x');
                     ball.vel.x *= -0.7;
                 }
             }
             if (ball.pos.x > f.x + f.width - margin) {
-                if (!inGoalY) {
+                if (!inGoalY || overBar) {
                     ball.pos.x = f.x + f.width - margin;
+                    this.bounceWallSound(ball, 'x');
                     ball.vel.x *= -0.7;
                 }
             }
             // Top/Bottom walls
             if (ball.pos.y < f.y + margin) {
                 ball.pos.y = f.y + margin;
+                this.bounceWallSound(ball, 'y');
                 ball.vel.y *= -0.7;
             }
             if (ball.pos.y > f.y + f.height - margin) {
                 ball.pos.y = f.y + f.height - margin;
+                this.bounceWallSound(ball, 'y');
                 ball.vel.y *= -0.7;
             }
+
+            // ===== Chốt an toàn: bóng không bao giờ vượt hẳn ra ngoài đường biên =====
+            // (bàn thắng đã được nhận ở vạch goalDepth trước đó nên không bị ảnh hưởng)
+            if (ball.pos.x < f.x) { ball.pos.x = f.x; if (ball.vel.x < 0) ball.vel.x *= -0.6; }
+            if (ball.pos.x > f.x + f.width) { ball.pos.x = f.x + f.width; if (ball.vel.x > 0) ball.vel.x *= -0.6; }
+            if (ball.pos.y < f.y) { ball.pos.y = f.y; if (ball.vel.y < 0) ball.vel.y *= -0.6; }
+            if (ball.pos.y > f.y + f.height) { ball.pos.y = f.y + f.height; if (ball.vel.y > 0) ball.vel.y *= -0.6; }
 
             // Player-ball collision (no owner)
             // Bóng đang bay cao (chuyền bổng) thì không ai chạm được
@@ -1492,11 +1520,92 @@ class Game {
                             ball.vel = new Vector2(0, 0);
                             ball.height = 0;
                             ball.heightVel = 0;
+                            this.audio.ballImpact('touch', 0.65);
                             p.hasBall = true;
                         }
                         break;
                     }
                 }
+            }
+        }
+    }
+
+    // Bóng đập tường bao -> tiếng "thịch" (chỉ khi bóng bay đủ nhanh)
+    bounceWallSound(ball, axis) {
+        if ((this._wallSoundCd || 0) > 0) return;
+        const speed = Math.abs(axis === 'x' ? ball.vel.x : ball.vel.y);
+        if (speed < 3) return;
+        this._wallSoundCd = 0.12;
+        this.audio.playWall();
+        if (speed > 14) this.camera.shake(1.5, 0.08);
+    }
+
+    // ===== Va chạm CỘT DỌC và XÀ NGANG =====
+    // Bóng đập cột/xà sẽ dội ra kèm tiếng "keng" kim loại thay vì vào lưới.
+    checkGoalFrame(dt) {
+        const ball = this.ball;
+        const f = this.field;
+        const cz = f.y + f.height / 2;
+        const goalHalf = this.goalHeight / 2;
+        const postR = this.goalPostRadius || 2.1;
+        const barH = this.goalBarHeight || Math.round(this.goalHeight * 0.45);
+        const bR = ball.radius;
+        this._barHitCd = Math.max(0, (this._barHitCd || 0) - dt);
+        this._goalBlockTimer = Math.max(0, (this._goalBlockTimer || 0) - dt);
+        if (this._barHitCd > 0) return;
+
+        const centerY3 = bR + (ball.height || 0) * 0.8;      // độ cao tâm bóng trong không gian 3D
+        const nearGoalLineL = Math.abs(ball.pos.x - f.x) < bR + postR + 4;
+        const nearGoalLineR = Math.abs(ball.pos.x - (f.x + f.width)) < bR + postR + 4;
+
+        for (const gx of [f.x, f.x + f.width]) {
+            // --- Cột dọc: hai bên mép khẩu độ ---
+            for (const sgn of [-1, 1]) {
+                const py = cz + sgn * goalHalf;
+                const dx = ball.pos.x - gx;
+                const dy = ball.pos.y - py;
+                const d = Math.hypot(dx, dy);
+                // chỉ tính cột ở phần dưới xà
+                if (d < bR + postR && centerY3 - bR < barH) {
+                    let nx = d > 0.001 ? dx / d : (gx < f.x + 1 ? 1 : -1);
+                    const ny = d > 0.001 ? dy / d : 0;
+                    // luôn dội bóng TRỞ LẠI trong sân (tránh bắn ra ngoài biên)
+                    if (gx < f.x + 1) nx = Math.abs(nx) || 1;
+                    else nx = -Math.abs(nx) || -1;
+                    ball.pos.x = gx + nx * (bR + postR + 0.6);
+                    ball.pos.y = py + ny * (bR + postR + 0.6);
+                    ball.pos.x = Math.max(f.x + 2, Math.min(f.x + f.width - 2, ball.pos.x));
+                    ball.pos.y = Math.max(f.y + 2, Math.min(f.y + f.height - 2, ball.pos.y));
+                    const vn = ball.vel.x * nx + ball.vel.y * ny;
+                    ball.vel.x = (ball.vel.x - 2 * vn * nx) * 0.68;
+                    ball.vel.y = (ball.vel.y - 2 * vn * ny) * 0.68;
+                    this.audio.playPost();
+                    this.particles.emit(ball.pos.x, ball.pos.y, '#ffffff', 7, { speed: 6 });
+                    this.camera.shake(3.5, 0.14);
+                    this._barHitCd = 0.22;
+                    this._goalBlockTimer = 0.3;
+                    this._frameHit = 'post';
+                    return;
+                }
+            }
+
+            // --- Xà ngang: bóng bay tới vạch với độ cao đúng tầm xà ---
+            const nearLine = gx < f.x + 1 ? nearGoalLineL : nearGoalLineR;
+            if (nearLine && Math.abs(ball.pos.y - cz) < goalHalf + bR &&
+                Math.abs(centerY3 - barH) < bR + postR * 0.8) {
+                const outDir = gx < f.x + 1 ? 1 : -1;      // đẩy bóng ra khỏi khung thành
+                ball.pos.x = gx + outDir * (bR + 10);
+                ball.vel.x = -ball.vel.x * 0.55;
+                ball.vel.y *= 0.7;
+                ball.height = Math.max(1.5, (ball.height || 0) * 0.55);
+                ball.heightVel = -Math.max(2.2, Math.abs(ball.heightVel || 0) * 0.5);
+                this.audio.playCrossbar();
+                this.particles.emit(ball.pos.x, ball.pos.y, '#ffffff', 9, { speed: 7 });
+                this.camera.shake(4.5, 0.18);
+                this._barHitCd = 0.25;
+                this._goalBlockTimer = 0.35;
+                this._frameHit = 'bar';
+                return;
             }
         }
     }
@@ -1575,6 +1684,7 @@ class Game {
                 this.ball.owner = p;
                 this.ball.vel = new Vector2(0, 0);
                 p.setAction('tackle', 0.5);
+                this.audio.ballImpact('tackle', 1.0);
                 this.particles.emit(p.pos.x, p.pos.y, '#ffd700', 8, { speed: 5 });
                 return;
             }
@@ -1591,6 +1701,7 @@ class Game {
     // ============= GOAL DETECTION =============
     checkGoal() {
         if (this.state !== GameState.PLAYING) return;
+        if ((this._goalBlockTimer || 0) > 0) return;
         const f = this.field;
         const b = this.ball.pos;
         const centerY = f.y + f.height / 2;
@@ -1601,17 +1712,20 @@ class Game {
 
         if (!inGoalY) return;
         // Bóng bay quá cao (vượt xà ngang) thì không tính bàn
-        if ((this.ball.height || 0) > 58) return;
+        const barH = this.goalBarHeight || Math.round(this.goalHeight * 0.45);
+        if ((this.ball.height || 0) * 0.8 > barH - this.ball.radius * 0.5) return;
 
         // Right goal → RED scores (Red attacks right)
         if (b.x > f.x + f.width - goalDepth) {
             this.redScore++;
+            this.audio.playNet();
             this.celebration('red', 'ĐỎ GHI BÀN!');
             this.audio.playGoal();
         }
         // Left goal → BLUE scores
         else if (b.x < f.x + goalDepth) {
             this.blueScore++;
+            this.audio.playNet();
             this.celebration('blue', 'XANH GHI BÀN!');
             this.audio.playGoal();
         }
@@ -1899,34 +2013,66 @@ class Game {
         }
     }
 
+    // ===== Khung thành 2D (kiểu FIFA: cột tròn + xà + lưới có võng) =====
     drawGoal(ctx, x, y, side) {
-        const w = 40;
+        const dir = side === 'right' ? -1 : 1;       // hướng lưới ăn vào trong sân
+        const depth = this.goalDepth || 34;
         const h = this.goalHeight;
-        ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-        ctx.lineWidth = 3;
+        const postR = this.goalPostRadius || 2.1;
+        const backX = x + dir * depth;               // vạch lưới sau
 
-        if (side === 'right') {
-            ctx.strokeRect(x - w, y, w, h);
-            // Net lines
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-            ctx.lineWidth = 1;
-            for (let i = 0; i <= w; i += 10) {
-                ctx.beginPath(); ctx.moveTo(x - i, y); ctx.lineTo(x - i, y + h); ctx.stroke();
-            }
-            for (let i = 0; i <= h; i += 10) {
-                ctx.beginPath(); ctx.moveTo(x - w, y + i); ctx.lineTo(x, y + i); ctx.stroke();
-            }
-        } else {
-            ctx.strokeRect(x, y, w, h);
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-            ctx.lineWidth = 1;
-            for (let i = 0; i <= w; i += 10) {
-                ctx.beginPath(); ctx.moveTo(x + i, y); ctx.lineTo(x + i, y + h); ctx.stroke();
-            }
-            for (let i = 0; i <= h; i += 10) {
-                ctx.beginPath(); ctx.moveTo(x, y + i); ctx.lineTo(x + w, y + i); ctx.stroke();
-            }
+        // --- Lưới (vẽ mờ phía sau) ---
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+        ctx.lineWidth = 1;
+        const step = 8;
+        for (let i = 0; i <= depth; i += step) {
+            const px = x + dir * i;
+            ctx.beginPath();
+            ctx.moveTo(px, y);
+            ctx.lineTo(px, y + h);
+            ctx.stroke();
         }
+        for (let i = 0; i <= h; i += step) {
+            ctx.beginPath();
+            ctx.moveTo(x, y + i);
+            ctx.lineTo(backX, y + i);
+            ctx.stroke();
+        }
+        // võng lưới sau
+        ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(backX, y);
+        ctx.lineTo(backX, y + h);
+        ctx.stroke();
+
+        // --- Khung: 2 cột + xà ngang + thanh sau ---
+        ctx.strokeStyle = 'rgba(250,252,255,0.95)';
+        ctx.lineWidth = Math.max(2, postR);
+        ctx.lineCap = 'round';
+        ctx.beginPath();                       // cột trên
+        ctx.moveTo(x, y);
+        ctx.lineTo(backX, y);
+        ctx.stroke();
+        ctx.beginPath();                       // cột dưới
+        ctx.moveTo(x, y + h);
+        ctx.lineTo(backX, y + h);
+        ctx.stroke();
+        ctx.beginPath();                       // xà trước (rộng nhất)
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + h);
+        ctx.stroke();
+
+        // --- Chấm cột tròn ở 2 góc khẩu độ ---
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        [y, y + h].forEach(py => {
+            ctx.beginPath();
+            ctx.arc(x, py, Math.max(2, postR), 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        ctx.restore();
     }
 
     drawPlayer(ctx, p) {

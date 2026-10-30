@@ -125,6 +125,41 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     check('Mỗi khán giả có màu áo riêng', stands.colored, 'instanceColor=' + stands.colored);
     check('Khán giả hiển thị trong scene', stands.visible, 'visible=' + stands.visible);
 
+    // ---------- 1b. Khung thành chuẩn FIFA ----------
+    const goals = await page.evaluate(() => {
+        const g = window.game, R = g.renderer3d;
+        const groups = R.goalGroups || [];
+        return {
+            count: groups.length,
+            barH: g.goalBarHeight,
+            mouth: g.goalHeight,
+            depth: g.goalDepth,
+            parts: groups.map(grp => {
+                let posts = 0, bars = 0, nets = 0, total = 0;
+                grp.traverse(o => {
+                    if (!o.isMesh) return;
+                    total++;
+                    if (o.userData.kind === 'net') nets++;
+                    const p = o.geometry && o.geometry.parameters;
+                    if (o.geometry && o.geometry.type === 'CylinderGeometry' && p) {
+                        if (Math.abs(p.height - g.goalBarHeight) < 0.6) posts++;
+                        if (Math.abs(p.height - g.goalHeight) < 0.6) bars++;
+                    }
+                });
+                const box = new window.THREE.Box3().setFromObject(grp);
+                return { posts, bars, nets, total, minY: +box.min.y.toFixed(1), maxY: +box.max.y.toFixed(1) };
+            })
+        };
+    });
+    check('Có 2 khung thành 3D', goals.count === 2, goals.count + ' khung thành');
+    check('Mỗi khung thành đủ 2 cột dọc + xà ngang + lưới',
+        goals.parts.every(p => p.posts === 2 && p.bars >= 1 && p.nets >= 3),
+        goals.parts.map(p => p.posts + ' cột/' + p.bars + ' xà/' + p.nets + ' lưới').join(' · '));
+    check('Tỉ lệ xà ngang chuẩn (0.33–0.5 khẩu độ)', goals.barH / goals.mouth > 0.33 && goals.barH / goals.mouth < 0.5,
+        'xà=' + goals.barH + ' / khẩu độ=' + goals.mouth);
+    check('Khung thành không lún dưới mặt sân', goals.parts.every(p => p.minY > -1),
+        goals.parts.map(p => 'minY=' + p.minY).join(' · '));
+
     // ---------- 2. Nghi thức trọng tài ----------
     await page.evaluate(() => document.getElementById('btn-play').click());
     await sleep(400);

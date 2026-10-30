@@ -50,7 +50,10 @@
                 w: f.width, d: f.height
             };
             this.goalWidth = game.goalHeight || 80;
-            this.goalTop = 52;
+            // Xà ngang: lấy theo gameplay (mặc định ~0.45 khẩu độ)
+            this.goalTop = game.goalBarHeight || Math.round(this.goalWidth * 0.45);
+            this.goalDepth = game.goalDepth || 34;
+            this.goalPostR = game.goalPostRadius || 2.1;
 
             // ---- WebGL renderer ----
             this.renderer = new THREE.WebGLRenderer({
@@ -513,83 +516,206 @@
             this.crowdJumpTimer = Math.max(this.crowdJumpTimer || 0, 1.2 + (power || 1) * 0.8);
         }
 
+        // ================= KHUNG THÀNH CHUẨN FIFA =================
+        // Cột + xà trắng tròn có đế, khung sau (trụ + thanh chống chéo),
+        // lưới căng 3 mặt (sau / trên dốc / hai hông hình thang) có võng nhẹ.
         buildGoals() {
             const P = this.pitch;
-            const gw = this.goalWidth / 2;         // nửa khung thành
-            const gh = this.goalTop;               // xà ngang
-            const depth = 46;
-            const postMat = new THREE.MeshStandardMaterial({ color: 0xf2f5ff, roughness: 0.35, metalness: 0.25 });
+            const gw = this.goalWidth / 2;          // nửa khẩu độ (theo trục dọc sân)
+            const gh = this.goalTop;                // chiều cao xà ngang
+            const depth = this.goalDepth;           // độ sâu khung thành
+            const postR = this.goalPostR;
 
-            // lưới (texture trong suốt)
-            const nc = makeCanvas(128, 128);
+            // ---- Vật liệu khung ----
+            const postMat = new THREE.MeshStandardMaterial({
+                color: 0xf8faff, roughness: 0.25, metalness: 0.38,
+                emissive: 0x0b0e16, emissiveIntensity: 0.18
+            });
+            const frameMat = new THREE.MeshStandardMaterial({
+                color: 0xdce4f2, roughness: 0.5, metalness: 0.35
+            });
+
+            // ---- Texture lưới (mắt vuông nhỏ) ----
+            const N = 256;
+            const nc = makeCanvas(N, N);
             const ng = nc.getContext('2d');
-            ng.clearRect(0, 0, 128, 128);
-            ng.strokeStyle = 'rgba(240,248,255,0.85)';
-            ng.lineWidth = 2;
-            for (let i = 0; i <= 128; i += 12) {
-                ng.beginPath(); ng.moveTo(i, 0); ng.lineTo(i, 128); ng.stroke();
-                ng.beginPath(); ng.moveTo(0, i); ng.lineTo(128, i); ng.stroke();
+            ng.clearRect(0, 0, N, N);
+            ng.strokeStyle = 'rgba(255,255,255,0.95)';
+            ng.lineWidth = 2.6;
+            const cell = 16;
+            for (let i = 0; i <= N; i += cell) {
+                ng.beginPath(); ng.moveTo(i, 0); ng.lineTo(i, N); ng.stroke();
+                ng.beginPath(); ng.moveTo(0, i); ng.lineTo(N, i); ng.stroke();
             }
             const netTex = new THREE.CanvasTexture(nc);
             netTex.wrapS = netTex.wrapT = THREE.RepeatWrapping;
             netTex.colorSpace = THREE.SRGBColorSpace;
-            const netMat = new THREE.MeshBasicMaterial({
-                map: netTex, transparent: true, opacity: 0.55,
-                side: THREE.DoubleSide, depthWrite: false, alphaTest: 0.15
-            });
+            netTex.anisotropy = 4;
+
+            // ---- Dựng một tấm lưới từ 4 góc (nội suy song tuyến tính + võng) ----
+            const makeNetQuad = (a, b, c, d, segU, segV, uRep, vRep, bulge) => {
+                const geo = new THREE.BufferGeometry();
+                const pos = [];
+                const uv = [];
+                const idx = [];
+                const AB = new THREE.Vector3().subVectors(b, a);
+                const DC = new THREE.Vector3().subVectors(c, d);
+                const AD = new THREE.Vector3().subVectors(d, a);
+                const normal = new THREE.Vector3().crossVectors(AB, AD).normalize();
+                for (let j = 0; j <= segV; j++) {
+                    const v = j / segV;
+                    for (let i = 0; i <= segU; i++) {
+                        const u = i / segU;
+                        const p1 = new THREE.Vector3().copy(a).addScaledVector(AB, u);
+                        const p2 = new THREE.Vector3().copy(d).addScaledVector(DC, u);
+                        const p = p1.lerp(p2, v);
+                        if (bulge) {
+                            const s = Math.sin(Math.PI * u) * Math.sin(Math.PI * v) * bulge;
+                            p.addScaledVector(normal, s);
+                        }
+                        pos.push(p.x, p.y, p.z);
+                        uv.push(u * uRep, v * vRep);
+                    }
+                }
+                for (let j = 0; j < segV; j++) {
+                    for (let i = 0; i < segU; i++) {
+                        const a0 = j * (segU + 1) + i;
+                        const b0 = a0 + 1;
+                        const c0 = a0 + segU + 1;
+                        const d0 = c0 + 1;
+                        idx.push(a0, c0, b0, b0, c0, d0);
+                    }
+                }
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+                geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+                geo.setIndex(idx);
+                geo.computeVertexNormals();
+                const mat = new THREE.MeshBasicMaterial({
+                    map: netTex, transparent: true, opacity: 0.5,
+                    side: THREE.DoubleSide, depthWrite: false,
+                    alphaTest: 0.1, fog: false
+                });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.userData.kind = 'net';
+                return mesh;
+            };
 
             const makeGoal = (dir) => {
                 // dir = +1: khung thành bên phải (đội ĐỎ tấn công), -1: bên trái
                 const gx = dir > 0 ? P.x1 : P.x0;
                 const grp = new THREE.Group();
+                const backX = gx + dir * depth;
+                const backTopY = gh * 0.74;                     // xà sau thấp hơn xà trước
+                const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
-                // cột dọc
+                // ---- Cột dọc ----
                 [-1, 1].forEach(s => {
-                    const post = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, gh, 14), postMat);
-                    post.position.set(gx, gh / 2, P.cz + s * gw);
+                    const zp = P.cz + s * gw;
+                    const post = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, gh, 18), postMat);
+                    post.position.set(gx, gh / 2, zp);
                     post.castShadow = true;
+                    post.userData.kind = 'goal';
                     grp.add(post);
+                    const foot = new THREE.Mesh(new THREE.CylinderGeometry(postR * 1.4, postR * 1.75, 1.4, 14), frameMat);
+                    foot.position.set(gx, 0.7, zp);
+                    foot.userData.kind = 'goal';
+                    grp.add(foot);
+                    // chân trụ phụ đỡ cột (kiểu khung thành chuyên nghiệp)
+                    const brace = new THREE.Mesh(new THREE.CylinderGeometry(postR * 0.45, postR * 0.45, depth * 0.8, 8), frameMat);
+                    brace.rotation.z = dir > 0 ? Math.PI / 2 - 0.2 : Math.PI / 2 + 0.2;
+                    brace.position.set(gx + dir * depth * 0.34, 3.2, zp);
+                    brace.userData.kind = 'goal';
+                    grp.add(brace);
                 });
-                // xà ngang
-                const bar = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, gw * 2, 14), postMat);
+
+                // ---- Xà ngang + khớp nối ----
+                const bar = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, gw * 2, 18), postMat);
                 bar.rotation.x = Math.PI / 2;
                 bar.position.set(gx, gh, P.cz);
                 bar.castShadow = true;
+                bar.userData.kind = 'goal';
                 grp.add(bar);
-
-                // thanh sau
-                const backX = gx + dir * depth;
                 [-1, 1].forEach(s => {
-                    const rail = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, gw * 2), postMat);
-                    rail.position.set(backX, gh * 0.62, P.cz);
-                    rail.castShadow = true;
-                    grp.add(rail);
-                    const bar2 = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, gh * 0.62, 10), postMat);
-                    bar2.position.set(backX, gh * 0.31, P.cz + s * gw);
-                    grp.add(bar2);
+                    const joint = new THREE.Mesh(new THREE.SphereGeometry(postR * 1.18, 14, 10), postMat);
+                    joint.position.set(gx, gh, P.cz + s * gw);
+                    joint.userData.kind = 'goal';
+                    grp.add(joint);
                 });
 
-                // lưới: mặt sau + 2 mặt bên + mặt trên
-                const backGeo = new THREE.PlaneGeometry(gw * 2, gh * 0.92);
-                const back = new THREE.Mesh(backGeo, netMat);
-                back.position.set(backX, gh * 0.46, P.cz);
-                back.rotation.y = Math.PI / 2;
-                back.userData.kind = 'net';
-                grp.add(back);
-
+                // ---- Khung sau ----
                 [-1, 1].forEach(s => {
-                    const side = new THREE.Mesh(new THREE.PlaneGeometry(depth, gh * 0.92), netMat);
-                    side.position.set(gx + dir * depth / 2, gh * 0.46, P.cz + s * gw);
-                    side.userData.kind = 'net';
-                    grp.add(side);
-                    const top = new THREE.Mesh(new THREE.PlaneGeometry(depth, gw * 2), netMat);
-                    top.position.set(gx + dir * depth / 2, gh, P.cz);
-                    top.rotation.x = -Math.PI / 2;
-                    top.userData.kind = 'net';
-                    grp.add(top);
+                    const zl = P.cz + s * gw;
+                    const stanchion = new THREE.Mesh(new THREE.CylinderGeometry(postR * 0.62, postR * 0.72, backTopY, 12), frameMat);
+                    stanchion.position.set(backX, backTopY / 2, zl);
+                    stanchion.castShadow = true;
+                    stanchion.userData.kind = 'goal';
+                    grp.add(stanchion);
+
+                    const diagLen = Math.hypot(depth, gh - backTopY);
+                    const diag = new THREE.Mesh(new THREE.CylinderGeometry(postR * 0.45, postR * 0.45, diagLen, 10), frameMat);
+                    diag.position.set(gx + dir * depth / 2, (gh + backTopY) / 2, zl);
+                    diag.rotation.z = dir > 0 ? Math.atan2(depth, gh - backTopY) : -Math.atan2(depth, gh - backTopY);
+                    diag.userData.kind = 'goal';
+                    grp.add(diag);
+                });
+                const topRear = new THREE.Mesh(new THREE.CylinderGeometry(postR * 0.62, postR * 0.62, gw * 2, 12), frameMat);
+                topRear.rotation.x = Math.PI / 2;
+                topRear.position.set(backX, backTopY, P.cz);
+                topRear.userData.kind = 'goal';
+                grp.add(topRear);
+                const bottomRear = new THREE.Mesh(new THREE.CylinderGeometry(postR * 0.5, postR * 0.5, gw * 2, 10), frameMat);
+                bottomRear.rotation.x = Math.PI / 2;
+                bottomRear.position.set(backX, 0.55, P.cz);
+                bottomRear.userData.kind = 'goal';
+                grp.add(bottomRear);
+                [-1, 1].forEach(s => {
+                    const bottomSide = new THREE.Mesh(new THREE.CylinderGeometry(postR * 0.5, postR * 0.5, depth, 10), frameMat);
+                    bottomSide.rotation.z = Math.PI / 2;
+                    bottomSide.position.set(gx + dir * depth / 2, 0.55, P.cz + s * gw);
+                    bottomSide.userData.kind = 'goal';
+                    grp.add(bottomSide);
                 });
 
-                // lưới phía trên (mái) + khung chữ
+                // ---- LƯỚI ----
+                const cellSize = 9;      // 1 ô lưới ~ 9 đơn vị
+                const uRep = Math.max(1, Math.round((gw * 2) / cellSize));
+                const vRepBack = Math.max(1, Math.round(backTopY / cellSize));
+                const vRepDepth = Math.max(1, Math.round(depth / cellSize));
+
+                // lưới sau (thẳng đứng, võng ra sau một chút)
+                grp.add(makeNetQuad(
+                    V(backX, 0, P.cz - gw), V(backX, 0, P.cz + gw),
+                    V(backX, backTopY, P.cz + gw), V(backX, backTopY, P.cz - gw),
+                    14, 6, uRep, vRepBack, dir * 1.8
+                ));
+
+                // lưới trên: dốc từ xà trước xuống xà sau
+                grp.add(makeNetQuad(
+                    V(gx, gh, P.cz - gw), V(gx, gh, P.cz + gw),
+                    V(backX, backTopY, P.cz + gw), V(backX, backTopY, P.cz - gw),
+                    14, 5, uRep, vRepDepth, dir * 1.2
+                ));
+
+                // lưới hông hai bên (hình thang: cao ở cột, thấp ở sau)
+                [-1, 1].forEach(s => {
+                    const zl = P.cz + s * gw;
+                    grp.add(makeNetQuad(
+                        V(gx, 0, zl), V(backX, 0, zl),
+                        V(backX, backTopY, zl), V(gx, gh, zl),
+                        6, 5, vRepDepth, vRepBack, 0
+                    ));
+                });
+
+                // ---- Vạch khung thành trên mặt sân ----
+                const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false });
+                [-1, 1].forEach(s => {
+                    const line = new THREE.Mesh(new THREE.PlaneGeometry(depth, 1.1), lineMat);
+                    line.rotation.x = -Math.PI / 2;
+                    line.position.set(gx + dir * depth / 2, 0.14, P.cz + s * gw);
+                    line.userData.kind = 'goal';
+                    grp.add(line);
+                });
+
                 grp.traverse(o => { if (o.isMesh) { o.userData.kind = o.userData.kind || 'goal'; } });
                 this.scene.add(grp);
                 this.goalGroups = this.goalGroups || [];
