@@ -72,10 +72,16 @@ Nếu trình duyệt không hỗ trợ WebGL, game tự động quay về chế 
 - **Kết thúc trận**: hiện bảng kết quả (tỉ số, đội thắng) và **tự động trở về MENU CHÍNH sau 8 giây**
   (vẫn có nút TRẬN MỚI / MENU CHÍNH để đi ngay).
 - **Banner kiểu FIFA 99**: `⚽ TRẬN ĐẤU SẮP BẮT ĐẦU` → `🔔 TRỌNG TÀI THỔI CÒI — BẮT ĐẦU!` → `GOAL!!! #9 · 3'`.
-- **🎙️ Bình luận viên tiếng Việt**: phụ đề bình luận hiện ở góc trái màn hình (hộp 🎙️) và **đọc thành tiếng**
-  bằng giọng tiếng Việt của trình duyệt (Web Speech API): giao bóng, chuyền bóng, chọc khe, bóng bổng,
-  sút, thủ môn cứu thua, sút ra ngoài, tranh bóng thành công/mất bóng, bóng vào vùng nguy hiểm,
-  bàn thắng (kèm số áo, phút, tỷ số) và kết thúc trận.
+- **🎙️ Bình luận viên tiếng Việt — phong cách BLV Tạ Biên Cương**: hào hứng, câu từ bay bổng và dồn dập
+  ("Vào! Vào! Vào!!!", "Hú hồn!", "Ôi trời ơi!", "Đẹp như mơ!", "Xứng đáng vào sách giáo khoa!"...).
+  Phụ đề hiện ở góc trái màn hình (hộp 🎙️) và **đọc thành tiếng** bằng giọng tiếng Việt của trình duyệt
+  (Web Speech API): giao bóng, chuyền bóng, chọc khe, bóng bổng, sút, thủ môn cứu thua, sút ra ngoài,
+  tranh bóng thành công/mất bóng, bóng vào vùng nguy hiểm, bàn thắng và kết thúc trận.
+  - Bàn thắng được đọc theo **chuỗi cao trào tăng dần**: "Vào!" (chậm) → "Vào!" (nhanh hơn) →
+    "Vào!!!" (rát, cao giọng) → rồi mới tới lời bình kèm số áo, phút và tỷ số.
+  - **Khán đài reo hò hoà cùng tiếng bình luận**: mỗi khi BLV nói một tình huống nóng, tiếng khán giả
+    dâng lên (càng cao trào càng to), và trong suốt lúc BLV bình luận khán đài luôn ở mức ồn cao hơn;
+    BLV nói xong thì khán đài hạ nhiệt dần.
   - Bật/tắt trong **Cài đặt → 🎙️ BÌNH LUẬN VIÊN (TIẾNG VIỆT)**, có nút **ĐỌC THỬ** và dòng trạng thái
     cho biết máy đã có giọng tiếng Việt hay chưa (nếu chưa, phụ đề vẫn hiển thị bình thường).
   - Câu bình luận có giới hạn tần suất (không nói dồn dập), riêng bàn thắng/hết trận luôn được ưu tiên nói ngay.

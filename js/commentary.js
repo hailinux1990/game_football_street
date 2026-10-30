@@ -1,80 +1,75 @@
 // ============================================================
 // BÌNH LUẬN VIÊN (tiếng Việt) - Commentary
+// Phong cách BLV Tạ Biên Cương: hào hứng, thốt lên dồn dập
+// ("Vào! Vào! Vào!!!", "Hú hồn!", "Ôi trời ơi!", "Đẹp như mơ!"...),
+// câu từ bay bổng, đọc nhanh - cao giọng khi cao trào.
 // - Hiện phụ đề bình luận trên HUD
 // - Đọc bằng giọng tiếng Việt qua Web Speech API (nếu máy có)
-// - Tự chọn câu theo tình huống: giao bóng, chuyền, chọc khe, bóng bổng,
-//   sút, cứu thua, tranh bóng, nguy hiểm, bàn thắng, hết giờ...
+// - Báo cho Game biết mỗi khi đang nói để khán đài reo theo
 // ============================================================
 (function () {
     'use strict';
 
+    // Lời bình luận theo phong cách BLV Tạ Biên Cương
     const PHRASES = {
         kickoff: [
-            'Trọng tài thổi còi! Trận đấu chính thức bắt đầu!',
-            'Bóng đã lăn! Một trận cầu hứa hẹn hấp dẫn.',
-            'Và trận đấu bắt đầu! Hai đội nhập cuộc đầy quyết tâm.'
+            'Các bạn ơi! Trọng tài thổi còi! Bóng đã lăn rồi! Trận đấu chính thức bắt đầu!',
+            'Ôi trời ơi! Tiếng còi vang lên! Bóng đã lăn trên mặt sân, một bữa tiệc bóng đá bắt đầu!',
+            'Hú hồn! Trận đấu khởi tranh! Hai đội bước vào với tinh thần rực lửa!'
         ],
         pass: [
-            'Chuyền bóng gọn gàng.',
-            'Phối hợp đẹp mắt!',
-            'Bóng được luân chuyển sang cánh.',
-            'Đường chuyền chính xác tới chân đồng đội.'
+            'Chuyền! Gọn gàng và dứt khoát!',
+            'Phối hợp như thêu hoa dệt gấm vậy!',
+            'Bóng sang cánh, nhịp độ trận đấu được đẩy lên rất cao!',
+            'Một đường chuyền đặt đúng tầm chân đồng đội!'
         ],
         through: [
-            'Chọc khe cực hiểm!',
-            'Đường chuyền xé toang hàng phòng ngự!',
-            'Bóng xuyên tuyến, cơ hội đang mở ra!'
+            'Chọc khe! Ối giời ơi, một đường chọc khe xé toang hàng phòng ngự!',
+            'Bóng xuyên tuyến! Đẹp như mơ các bạn ạ!',
+            'Một pha bóng xứng đáng vào sách giáo khoa!'
         ],
         loft: [
-            'Bóng bổng lên cao!',
-            'Đường bóng dài vượt tuyến phòng ngự!',
-            'Tạt bóng bổng vào vòng cấm!'
+            'Bóng bổng! Trời long đất lở!',
+            'Đường bóng dài vượt tuyến, vượt qua cả hàng phòng ngự!',
+            'Treo bóng vào vòng cấm! Gay cấn lắm rồi các bạn ơi!'
         ],
         shot: [
-            'SÚT!!!',
-            'Dứt điểm!',
-            'Cú sút rất căng!',
-            'Tung cú đại bác về phía khung thành!'
+            'Sút! Sút! Sút!!!',
+            'Dứt điểm! Một cú đại bác!',
+            'Tung cú sút như trời giáng!'
         ],
         save: [
-            'Cứu thua xuất sắc!',
-            'Thủ môn bay người cản phá!',
-            'Pha cứu thua không tưởng của thủ môn!',
-            'Thủ môn đã đọc được tình huống!'
+            'Cứu thua! Cứu thua! Hú hồn!',
+            'Thủ môn bay người như chim cắt! Tuyệt tác!',
+            'Pha cứu thua không thể tin nổi! Đỉnh cao!'
         ],
         miss: [
-            'Bóng đi chệch khung thành!',
-            'Đáng tiếc, bóng đã ra ngoài!',
-            'Cơ hội trôi qua trước mũi giày!'
+            'Chệch rồi! Ôi tiếc quá các bạn ơi!',
+            'Ra ngoài! Hú hồn! Suýt nữa thì vào!',
+            'Đáng tiếc! Bóng đi ra ngoài khung thành!'
         ],
         tackle: [
-            'Tranh bóng thành công!',
-            'Cướp bóng quyết đoán!',
-            'Một pha vào bóng dứt khoát, bóng đã đổi chủ!',
-            'Đoạt bóng ngay trước chân đối phương!'
+            'Cướp bóng! Dứt khoát lắm!',
+            'Một pha vào bóng như chẻ tre!',
+            'Bóng đổi chủ! Anh em ơi, hay quá!'
         ],
         steal: [
-            'Đối phương vừa cướp được bóng!',
-            'Mất bóng rồi! Cần tranh lại ngay.',
-            'Bóng đã bị đoạt trong chân!'
+            'Mất bóng rồi! Chết dở!',
+            'Bị cướp bóng ngay trong chân!',
+            'Hàng thủ ơi! Tỉnh táo lên nào!'
         ],
         danger: [
-            'Nguy hiểm! Bóng đã vào vùng nóng.',
-            'Khu vực cực kỳ nguy hiểm trước khung thành!',
-            'Hàng thủ phải hết sức cảnh giác!'
-        ],
-        buildup: [
-            'Bóng đang được triển khai bên phần sân đối phương.',
-            'Đội bóng đang kiểm soát thế trận.',
-            'Nhịp độ trận đấu đang được đẩy cao.'
+            'Nguy hiểm! Nguy hiểm lắm rồi!',
+            'Bóng vào vùng nóng! Tim tôi đập thình thịch!',
+            'Khu vực này là chảo lửa! Căng như dây đàn!'
         ],
         end: [
-            'Hết giờ! Trọng tài nổi còi kết thúc trận đấu!',
-            'Tiếng còi mãn cuộc đã vang lên!'
+            'Hết giờ! Tiếng còi mãn cuộc vang lên! Ôi trời, một trận đấu để đời!',
+            'Trọng tài thổi còi! Trận đấu khép lại! Các bạn ơi, tuyệt vời!'
         ],
         menu: [
-            'Chào mừng tới với Street Football! Chọn CHƠI NGAY để vào sân.',
-            'Sẵn sàng chưa? Bấm CHƠI NGAY để bắt đầu trận đấu!'
+            'Chào mừng các bạn tới với Street Football!',
+            'Các bạn ơi! Bấm CHƠI NGAY để cùng tôi bình luận trận đấu nào!'
         ]
     };
 
@@ -84,23 +79,36 @@
         return arr[Math.floor(Math.random() * arr.length)];
     }
 
+    // Ước lượng thời lượng đọc (giây) để biết BLV đang "nói" trong bao lâu
+    function estimateSeconds(text, rate) {
+        const words = (text || '').trim().split(/\s+/).length;
+        return Math.max(0.8, (words / (2.6 * (rate || 1.2))) + 0.25);
+    }
+
     class Commentary {
         constructor(game) {
             this.game = game;
             this.enabled = true;        // bật/tắt bình luận
             this.voiceEnabled = true;   // đọc thành tiếng hay chỉ phụ đề
-            this.volume = 0.9;
-            this.rate = 1.12;
-            this.minGap = 1.0;          // giây tối thiểu giữa 2 câu (câu quan trọng được ưu tiên)
+            this.volume = 1.0;
+            this.rate = 1.22;           // nói nhanh, dồn dập kiểu BLV trực tiếp
+            this.pitch = 1.12;
+            this.minGap = 1.0;          // giây tối thiểu giữa 2 câu thường
             this._lastAt = -99;
             this._lastKind = null;
             this._lastText = null;
+            this._talkingUntil = 0;     // mốc thời gian BLV còn đang nói
+            this._seq = null;
+            this._seqIdx = 0;
+            this._seqTimer = null;
+            this._utter = null;
             this.history = [];
             this._voice = null;
             this._voicesReady = false;
-            this._utter = null;
             this.lastText = '';
             this.textTimer = 0;
+            this.onLine = null;         // callback(kind, text) — Game dùng để khán đài reo theo
+            this.onSpeakState = null;   // callback(booleam) — bắt đầu/kết thúc nói
 
             this.loadSettings();
             this.initVoices();
@@ -142,6 +150,25 @@
             return (typeof window !== 'undefined' && window.speechSynthesis) ? window.speechSynthesis : null;
         }
 
+        _now() {
+            return (typeof performance !== 'undefined' && performance.now) ? performance.now() / 1000 : Date.now() / 1000;
+        }
+
+        // BLV có đang nói không? (dùng cho khán đài reo theo)
+        isSpeaking() {
+            if (!this.enabled) return false;
+            if (this._now() < this._talkingUntil) return true;
+            const syn = this.synth;
+            return !!(syn && syn.speaking);
+        }
+
+        // Mức "năng lượng" hiện tại 0..1 (câu cao trào -> khán đài reo to hơn)
+        energy() {
+            if (!this.isSpeaking()) return 0;
+            const left = Math.max(0, this._talkingUntil - this._now());
+            return Math.min(1, 0.55 + left * 0.25);
+        }
+
         initVoices() {
             const syn = this.synth;
             if (!syn) return;
@@ -162,7 +189,6 @@
             } catch (e) { /* ignore */ }
         }
 
-        // Có giọng tiếng Việt trên máy không?
         hasVietnameseVoice() {
             if (!this._voicesReady) this.initVoices();
             return !!this._voice;
@@ -174,40 +200,93 @@
         }
 
         shutUp() {
+            this._seq = null;
+            this._seqIdx = 0;
+            if (this._seqTimer) { clearTimeout(this._seqTimer); this._seqTimer = null; }
+            this._talkingUntil = 0;
             const syn = this.synth;
-            if (syn && syn.speaking) {
+            if (syn) {
                 try { syn.cancel(); } catch (e) { /* ignore */ }
             }
+            if (typeof this.onSpeakState === 'function') this.onSpeakState(false);
         }
 
+        _makeUtterance(text, rate, pitch) {
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = this._voice ? (this._voice.lang || 'vi-VN') : 'vi-VN';
+            if (this._voice) u.voice = this._voice;
+            u.volume = Math.max(0, Math.min(1, this.volume));
+            u.rate = Math.max(0.5, Math.min(2, rate || this.rate));
+            u.pitch = Math.max(0, Math.min(2, pitch || this.pitch));
+            return u;
+        }
+
+        // Đọc 1 câu
         speak(text) {
+            return this.speakSequence([{ text: text }]);
+        }
+
+        // Đọc một chuỗi câu (dùng cho pha cao trào: "Vào! Vào! Vào!!! ...")
+        speakSequence(parts) {
             const syn = this.synth;
-            if (!syn || !text) return false;
+            if (!syn || !parts || !parts.length) return false;
+            this.shutUp();
+            this._seq = parts;
+            this._seqIdx = 0;
+            this._speakNext();
+            return true;
+        }
+
+        _speakNext() {
+            const syn = this.synth;
+            if (!this._seq || !syn) return;
+            if (this._seqIdx >= this._seq.length) {
+                this._seq = null;
+                if (typeof this.onSpeakState === 'function') this.onSpeakState(false);
+                return;
+            }
+            const part = this._seq[this._seqIdx++];
+            const text = typeof part === 'string' ? part : part.text;
+            const rate = (typeof part === 'object' && part.rate) || this.rate;
+            const pitch = (typeof part === 'object' && part.pitch) || this.pitch;
+            if (!text) { this._speakNext(); return; }
+
+            this._talkingUntil = this._now() + estimateSeconds(text, rate) + 0.15;
+            if (typeof this.onSpeakState === 'function') this.onSpeakState(true);
+
             try {
-                if (syn.speaking || syn.pending) {
-                    // câu mới át câu cũ (bình luận trực tiếp cần cập nhật tức thì)
-                    syn.cancel();
-                }
-                const u = new SpeechSynthesisUtterance(text);
-                u.lang = this._voice ? (this._voice.lang || 'vi-VN') : 'vi-VN';
-                if (this._voice) u.voice = this._voice;
-                u.volume = Math.max(0, Math.min(1, this.volume));
-                u.rate = this.rate;
-                u.pitch = 1.02;
-                this._utter = u;      // giữ tham chiếu để tránh bị GC
+                syn.cancel();
+                const u = this._makeUtterance(text, rate, pitch);
+                let advanced = false;
+                const next = () => {
+                    if (advanced) return;
+                    advanced = true;
+                    if (this._seqTimer) { clearTimeout(this._seqTimer); this._seqTimer = null; }
+                    this._speakNext();
+                };
+                u.onend = next;
+                u.onerror = next;
+                this._utter = u;          // giữ tham chiếu tránh bị GC
                 syn.speak(u);
-                return true;
+                // dự phòng khi trình duyệt không bắn onend (máy không có giọng)
+                const wait = Math.min(2600, Math.max(700, estimateSeconds(text, rate) * 1000 * 1.35));
+                this._seqTimer = setTimeout(next, wait);
+                // Node (khi chạy test) không nên giữ process sống vì timer này
+                if (this._seqTimer && typeof this._seqTimer.unref === 'function') this._seqTimer.unref();
             } catch (e) {
-                return false;
+                this._speakNext();
             }
         }
 
         // Đọc thử (nút trong phần Cài đặt)
         testVoice() {
-            const text = 'Xin chào! Đây là bình luận viên tiếng Việt của Street Football.';
-            this.showText(text);
+            const parts = [
+                { text: 'Hú hồn!', rate: 1.3, pitch: 1.35 },
+                { text: 'Đây là bình luận viên tiếng Việt của Street Football, các bạn ơi!', rate: 1.15, pitch: 1.15 }
+            ];
+            this.showText('Hú hồn! Đây là bình luận viên tiếng Việt của Street Football, các bạn ơi!');
             if (!this.voiceEnabled) return false;
-            return this.speak(text);
+            return this.speakSequence(parts);
         }
 
         // ---------- Phụ đề ----------
@@ -235,14 +314,11 @@
         }
 
         // ---------- API chính ----------
-        // kind: 'kickoff' | 'pass' | 'through' | 'loft' | 'shot' | 'save' | 'miss'
-        //       | 'tackle' | 'steal' | 'danger' | 'buildup' | 'end' | 'goal' | 'info'
         say(kind, text, opts) {
             opts = opts || {};
             if (!this.enabled) return false;
 
-            // khoảng nghỉ giữa các câu (câu quan trọng được bỏ qua giới hạn)
-            const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() / 1000 : Date.now() / 1000;
+            const now = this._now();
             const priority = opts.priority || (kind === 'goal' || kind === 'end' || kind === 'kickoff' ? 2 : 0);
             if (priority < 2 && now - this._lastAt < this.minGap) return false;
             if (text && text === this._lastText && kind === this._lastKind) return false;
@@ -257,35 +333,59 @@
             if (this.history.length > 40) this.history.shift();
 
             this.showText((opts.tag ? opts.tag + ' ' : '') + line);
-            if (this.voiceEnabled) this.speak(line);
+
+            // Khán đài reo theo từng tình huống bình luận
+            if (typeof this.onLine === 'function') this.onLine(kind, line);
+
+            if (this.voiceEnabled) {
+                if (opts.sequence && opts.sequence.length) {
+                    this.speakSequence(opts.sequence);
+                } else {
+                    this.speakSequence([{ text: line, rate: opts.rate || this.rate, pitch: opts.pitch || this.pitch }]);
+                }
+            } else {
+                this._talkingUntil = this._now() + estimateSeconds(line, this.rate);
+            }
             return true;
         }
 
         // ===== Các tình huống cụ thể của trận đấu =====
         sayKickoff() {
-            return this.say('kickoff', '', { priority: 2 });
+            return this.say('kickoff', '', { priority: 2, rate: 1.3, pitch: 1.18 });
         }
 
+        // Bàn thắng: chuỗi "Vào! Vào! Vào!!!" rồi mới tới lời bình
         sayGoal(team, scorer, minute, redScore, blueScore) {
             const t = TEAM_VI[team] || 'ĐỎ';
             const who = scorer
-                ? ('số ' + (scorer.playerNum || 0) + (scorer.role ? ' (' + this.roleVi(scorer.role) + ')' : ''))
+                ? ('số ' + (scorer.playerNum || 0) + (scorer.role ? ', ' + this.roleVi(scorer.role) : ''))
                 : 'một cầu thủ';
             const variants = [
-                'VÀO!!! Bàn thắng cho đội ' + t + '! ' + who + ' dứt điểm chuẩn xác ở phút thứ ' + minute + '!',
-                'VÀO LƯỚI!!! ' + who + ' ghi bàn cho đội ' + t + '! Tỷ số giờ là ' + redScore + ' đều ' + blueScore + '!',
-                'BÀN THẮNG!!! Đội ' + t + ' vừa mở tỷ số ở phút ' + minute + '! Khán đài như nổ tung!'
+                'Bàn thắng rồi các bạn ơi! ' + who + ' dứt điểm như trời giáng! Đội ' + t + ' ghi bàn ở phút thứ ' + minute + '!',
+                'Vào lưới rồi! Một pha bóng xứng đáng vào sách giáo khoa! ' + who + ' ghi bàn cho đội ' + t + '! Tỷ số là ' + redScore + ' đều ' + blueScore + '!',
+                'Ôi trời ơi! Đẹp như mơ! Đội ' + t + ' vừa mở tỷ số ở phút ' + minute + '! Khán đài như nổ tung!'
             ];
-            return this.say('goal', pick(variants), { priority: 2 });
+            const line = pick(variants);
+            return this.say('goal', line, {
+                priority: 2,
+                rate: 1.3,
+                pitch: 1.25,
+                sequence: [
+                    { text: 'Vào!', rate: 1.15, pitch: 1.1 },
+                    { text: 'Vào!', rate: 1.35, pitch: 1.25 },
+                    { text: 'Vào!!!', rate: 1.5, pitch: 1.4 },
+                    { text: line, rate: 1.22, pitch: 1.2 }
+                ]
+            });
         }
 
         sayShot(isHuman) {
-            if (isHuman) return this.say('shot', '', { priority: 1 });
-            return this.say('shot', '', { priority: 0 });
+            if (isHuman) return this.say('shot', '', { priority: 1, rate: 1.4, pitch: 1.25 });
+            return this.say('shot', '', { priority: 0, rate: 1.3, pitch: 1.15 });
         }
 
         saySave() {
-            return this.say('save', '', { priority: 1 });
+            return this.say('save', '', { priority: 1, rate: 1.32, pitch: 1.2 });
         }
 
         sayMiss() {
@@ -301,14 +401,14 @@
         }
 
         sayDanger() {
-            return this.say('danger', '', { priority: 1 });
+            return this.say('danger', '', { priority: 1, rate: 1.28, pitch: 1.18 });
         }
 
         sayEnd(redScore, blueScore) {
             const result = redScore > blueScore ? 'Đội ĐỎ giành chiến thắng!'
-                : (redScore < blueScore ? 'Đội XANH giành chiến thắng!' : 'Hai đội hòa nhau!');
+                : (redScore < blueScore ? 'Đội XANH giành chiến thắng!' : 'Hai đội hòa nhau, một trận cầu quá hay!');
             const text = pick(PHRASES.end) + ' Tỷ số chung cuộc ' + redScore + ' - ' + blueScore + '. ' + result;
-            return this.say('end', text, { priority: 2 });
+            return this.say('end', text, { priority: 2, rate: 1.24, pitch: 1.18 });
         }
 
         sayMenu() {

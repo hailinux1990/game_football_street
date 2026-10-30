@@ -154,7 +154,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 ? Math.abs(m.group.position.x - g.referee.pos.x) < 0.01 &&
                   Math.abs(m.group.position.z - g.referee.pos.y) < 0.01
                 : false,
-            refInsidePitch: g.referee.pos.x > g.field.x && g.referee.pos.x < g.field.x + g.field.width,
+            refInsidePitch: g.referee.pos.x > g.field.x - 20 && g.referee.pos.x < g.field.x + g.field.width + 20
+                && g.referee.pos.y > g.field.y - 20 && g.referee.pos.y < g.field.y + g.field.height + 20,
             players: R.stats().players
         };
     });

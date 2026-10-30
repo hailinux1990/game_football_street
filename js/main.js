@@ -87,6 +87,11 @@ class Game {
         this.commentary = (typeof window !== 'undefined' && window.Commentary)
             ? new window.Commentary(this)
             : null;
+
+        if (this.commentary) {
+            // Khán đài reo ngay khi BLV bắt đầu nói một tình huống nóng
+            this.commentary.onLine = (kind, text) => this.onCommentaryLine(kind, text);
+        }
         this._dangerCd = 0;
         this._goalShotBy = null;
     }
@@ -430,8 +435,12 @@ class Game {
         );
         const tension = Math.max(0, 1 - distGoal / (f.width * 0.55));
         this.crowdCheerTimer = Math.max(0, (this.crowdCheerTimer || 0) - dt);
-        const target = this.state === GameState.MENU ? 0.3
+        const talking = this.commentary ? this.commentary.isSpeaking() : false;
+        const talkEnergy = talking ? (this.commentary.energy ? this.commentary.energy() : 0.7) : 0;
+        let target = this.state === GameState.MENU ? 0.3
             : Math.min(1, 0.38 + tension * 0.42 + (this.crowdCheerTimer > 0 ? 0.3 : 0));
+        // BLV đang bình luận -> khán đài dâng lên hoà cùng giọng bình luận
+        if (talking) target = Math.min(0.92, target + 0.10 + talkEnergy * 0.12);
         this.crowdIntensity = this.crowdIntensity + (target - this.crowdIntensity) * Math.min(1, dt * 2.2);
 
         // Cập nhật âm thanh ~4 lần/giây cho nhẹ
@@ -525,6 +534,16 @@ class Game {
     }
 
     // ===== BÌNH LUẬN VIÊN =====
+    // Khán đài reo hò hoà cùng tiếng bình luận
+    onCommentaryLine(kind, text) {
+        const excite = { goal: 1.0, save: 0.5, shot: 0.42, miss: 0.35, tackle: 0.3, danger: 0.45, through: 0.25 }[kind];
+        if (excite) {
+            this.crowdCheerTimer = Math.max(this.crowdCheerTimer || 0, 0.7 + excite);
+            this.crowdIntensity = Math.min(0.95, Math.max(this.crowdIntensity || 0.35, 0.4 + excite * 0.35));
+            if (typeof this.audio.crowdSwell === 'function') this.audio.crowdSwell(excite);
+        }
+    }
+
     updateCommentary(dt) {
         if (!this.commentary) return;
         this.commentary.update(dt);

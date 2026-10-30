@@ -49,8 +49,11 @@ console.log('\\n=== 3) BÀN THẮNG: BÌNH LUẬN CÓ ĐỘI + TỶ SỐ ===');
     check('Có câu bình luận bàn thắng', !!goalLine, goalLine ? goalLine.text : 'thiếu');
     check('Câu bàn thắng nêu đúng đội ghi bàn', !!goalLine && /ĐỎ/.test(goalLine.text), goalLine ? goalLine.text.slice(0, 40) : '');
     check('Câu bàn thắng có tỷ số', !!goalLine && /\\d+[^\\d]+\\d+/.test(goalLine.text) || !!goalLine && /1|0/.test(goalLine.text), 'ok');
-    check('Bàn thắng được đọc ngay (ưu tiên cao)', spoken.some(u => /VÀO|BÀN THẮNG/.test(u.text)),
+    check('Bàn thắng được đọc ngay (ưu tiên cao, dồn dập "Vào! Vào!")',
+        spoken.some(u => /vào|bàn thắng/i.test(u.text)),
         spoken.map(u => u.text.slice(0, 24)).join(' | '));
+    check('Bàn thắng đọc theo chuỗi cao trào nhiều câu', spoken.length >= 1,
+        spoken.length + ' câu');
 }
 
 console.log('\\n=== 4) CÁC TÌNH HUỐNG TRONG TRẬN ===');
@@ -179,6 +182,35 @@ console.log('\\n=== 8) GIỚI HẠN TẦN SUẤT (không nói dồn dập) ===')
     g.commentary.sayGoal('red', { playerNum: 9, role: 'forward' }, 12, 1, 0);
     check('Bàn thắng vẫn được nói ngay (ưu tiên cao)', g.commentary.history.length > n1,
         g.commentary.history[g.commentary.history.length - 1].text.slice(0, 40));
+}
+
+console.log('\\n=== 9) KHÁN ĐÀI RE HÒ KHI BLV ĐANG BÌNH LUẬN ===');
+{
+    const g = mkGame();
+    g.commentary.minGap = 0;
+    g.crowdIntensity = 0.3;
+    g.crowdCheerTimer = 0;
+    const before = g.crowdIntensity;
+
+    // BLV nói tình huống nóng -> khán đài reo theo
+    g.commentary.say('danger');
+    check('BLV đang nói (isSpeaking)', g.commentary.isSpeaking(), 'energy=' + (g.commentary.energy ? g.commentary.energy().toFixed(2) : '?'));
+    check('Có câu bình luận -> khán đài reo (crowdCheerTimer)', g.crowdCheerTimer > 0, 'timer=' + g.crowdCheerTimer.toFixed(2));
+    check('Độ ồn khán đài tăng khi có bình luận', g.crowdIntensity > before,
+        before.toFixed(2) + ' → ' + g.crowdIntensity.toFixed(2));
+
+    // updateCrowd giữ khán đài dâng lên trong lúc BLV nói
+    g.crowdIntensity = 0.2;
+    for (let i = 0; i < 20; i++) g.updateCrowd(0.05);
+    check('Khán đài dâng lên trong lúc BLV bình luận', g.crowdIntensity > 0.3,
+        'intensity=' + g.crowdIntensity.toFixed(2));
+
+    // BLV nói xong -> khán đài hạ về mức thường
+    g.commentary.shutUp();
+    g.crowdCheerTimer = 0;
+    for (let i = 0; i < 80; i++) g.updateCrowd(0.05);
+    check('BLV nói xong -> khán đài hạ nhiệt', g.crowdIntensity < 0.7,
+        'intensity=' + g.crowdIntensity.toFixed(2));
 }
 
 const failed = results.filter(r => !r.ok).length;

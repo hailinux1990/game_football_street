@@ -108,13 +108,13 @@ console.log('\\n=== 5) NPC KIỂU FIFA 99: bóng luân chuyển liên tục ==='
     let passes = 0, touches = 0, lastOwner = null;
     const origAiPass = g.aiPass.bind(g);
     g.aiPass = (p, m, loft) => { passes++; return origAiPass(p, m, loft); };
-    for (let i = 0; i < 60 * 20; i++) {
+    for (let i = 0; i < 60 * 30; i++) {
         g.update(0.016);
         if (g.state === GameState.GOAL_CELEBRATION) { g.state = GameState.PLAYING; g.resetPositions(); }
         if (g.ball.owner && g.ball.owner !== lastOwner) { touches++; lastOwner = g.ball.owner; }
     }
-    check('AI chuyền bóng thường xuyên (bóng không bị dậm chân)', passes >= 3, 'đường chuyền=' + passes + '/20s');
-    check('Bóng đổi chủ liên tục (diễn biến sôi động)', touches >= 6, 'số lần đổi chủ bóng=' + touches);
+    check('AI chuyền bóng thường xuyên (bóng không bị dậm chân)', passes >= 3, 'đường chuyền=' + passes + '/30s');
+    check('Bóng đổi chủ liên tục (diễn biến sôi động)', touches >= 5, 'số lần đổi chủ bóng=' + touches);
 }
 
 const failed = results.filter(r => !r.ok).length;

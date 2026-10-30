@@ -278,12 +278,31 @@ class AudioManager {
     setCrowdLevel(level) {
         const v = Math.max(0, Math.min(1, level));
         this.crowdLevel = v;
+        // đang có pha dâng lên / hò reo thì để nó chạy, không cắt ngang
+        if (this.context && this._crowdRampUntil && this.context.currentTime < this._crowdRampUntil) return;
         if (this.crowdGain && this.context) {
             this.crowdGain.gain.value = this.enabled ? 0.10 + v * 0.22 : 0;
         }
         if (this.crowdBand && this.context) {
             this.crowdBand.frequency.value = 620 + v * 700;
         }
+    }
+
+    // Khán đài dâng lên nhẹ (dùng khi BLV đang bình luận / pha bóng hay)
+    crowdSwell(power) {
+        if (!this.context || !this.crowdGain) return;
+        const p = Math.max(0.1, Math.min(1.2, power || 0.5));
+        const g = this.crowdGain.gain;
+        const t = this.context.currentTime;
+        const base = this.enabled ? 0.10 + (this.crowdLevel || 0.35) * 0.22 : 0;
+        try {
+            g.cancelScheduledValues(t);
+            g.setValueAtTime(g.value, t);
+            g.linearRampToValueAtTime(base + p * 0.22, t + 0.22);
+            g.linearRampToValueAtTime(base + p * 0.10, t + 0.7);
+            g.linearRampToValueAtTime(base, t + 1.9);
+            this._crowdRampUntil = t + 1.9;
+        } catch (e) { /* ignore */ }
     }
 
     // Hò reo bùng nổ (ghi bàn, tranh cướp hay, hết trận...)
@@ -298,6 +317,7 @@ class AudioManager {
         g.linearRampToValueAtTime(base + p * 0.55, t + 0.18);
         g.linearRampToValueAtTime(base + p * 0.34, t + 1.1);
         g.linearRampToValueAtTime(base, t + 2.6);
+        this._crowdRampUntil = t + 2.6;
         // tiếng huýt sáo/hò reo ngẫu nhiên
         for (let i = 0; i < 3; i++) {
             setTimeout(() => this.playTone(700 + Math.random() * 900, 0.35, 'triangle', 0.05 * p), 60 + i * 180);
