@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Street Football 3D - FIFA Street Style</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="style.css?v=20261031b">
+    <link rel="stylesheet" href="style.css?v=20261031c">
 </head>
 <body>
     <div id="game-container">
@@ -85,21 +85,6 @@
                             <input type="checkbox" id="sound-enabled" checked>
                         </label>
                     </div>
-                    <div class="controls-section commentary-section">
-                        <h3 class="controls-title">🎙️ BÌNH LUẬN VIÊN (TIẾNG VIỆT)</h3>
-                        <div class="setting-group">
-                            <label>Bật bình luận:
-                                <input type="checkbox" id="commentary-enabled" checked>
-                            </label>
-                        </div>
-                        <div class="setting-group">
-                            <label>Đọc thành tiếng (giọng tiếng Việt):
-                                <input type="checkbox" id="commentary-voice" checked>
-                            </label>
-                        </div>
-                        <div id="commentary-voice-status" class="controls-hint-text">Đang kiểm tra giọng tiếng Việt...</div>
-                        <button id="btn-test-commentary" class="menu-btn small-btn">🔊 ĐỌC THỬ</button>
-                    </div>
                     <div class="setting-group">
                         <label>Hiệu ứng hạt: 
                             <input type="checkbox" id="particles-enabled" checked>
@@ -141,7 +126,6 @@
                     <p>Phong cách FIFA Street 3 · đồ hoạ 3D WebGL</p>
                     <p>6 cầu thủ 3D có đầy đủ chân tay, animation sút/chuyền/kỹ thuật</p>
                     <p>Trọng tài NPC thổi còi bắt đầu & kết thúc trận, khán đài có khán giả reo hò</p>
-                    <p>🎙️ Bình luận viên tiếng Việt: phụ đề + giọng đọc (Web Speech API)</p>
                     <p>3 góc nhìn: Người thứ ba, Toàn cảnh sân, và FIFA 99 (góc cao bám bóng)</p>
                     <br>
                     <p>Controls:</p>
@@ -205,14 +189,6 @@
                 </div>
                 <div class="camera-badge" id="camera-mode-badge">🎥 NGƯỜI THỨ BA</div>
                 <div id="match-banner" class="match-banner"></div>
-                <!-- Bình luận viên -->
-                <div id="commentary-box" class="commentary-box">
-                    <div class="commentary-mic">🎙️</div>
-                    <div class="commentary-text">
-                        <div id="commentary-prev" class="commentary-prev"></div>
-                        <div id="commentary-line" class="commentary-line"></div>
-                    </div>
-                </div>
             </div>
 
             <!-- Goal Celebration -->
@@ -240,15 +216,14 @@
     </div>
 
     <script src="js/vendor/three.min.js?v=160"></script>
-    <script src="js/game.js?v=20261031b"></script>
-    <script src="js/entities.js?v=20261031b"></script>
-    <script src="js/field.js?v=20261031b"></script>
-    <script src="js/ai.js?v=20261031b"></script>
-    <script src="js/player_model.js?v=20261031b"></script>
-    <script src="js/render3d.js?v=20261031b"></script>
+    <script src="js/game.js?v=20261031c"></script>
+    <script src="js/entities.js?v=20261031c"></script>
+    <script src="js/field.js?v=20261031c"></script>
+    <script src="js/ai.js?v=20261031c"></script>
+    <script src="js/player_model.js?v=20261031c"></script>
+    <script src="js/render3d.js?v=20261031c"></script>
 
-    <script src="js/ui.js?v=20261031b"></script>
-    <script src="js/commentary.js?v=20261031b"></script>
-    <script src="js/main.js?v=20261031b"></script>
+    <script src="js/ui.js?v=20261031c"></script>
+    <script src="js/main.js?v=20261031c"></script>
 </body>
 </html>

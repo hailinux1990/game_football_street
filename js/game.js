@@ -288,23 +288,6 @@ class AudioManager {
         }
     }
 
-    // Khán đài dâng lên nhẹ (dùng khi BLV đang bình luận / pha bóng hay)
-    crowdSwell(power) {
-        if (!this.context || !this.crowdGain) return;
-        const p = Math.max(0.1, Math.min(1.2, power || 0.5));
-        const g = this.crowdGain.gain;
-        const t = this.context.currentTime;
-        const base = this.enabled ? 0.10 + (this.crowdLevel || 0.35) * 0.22 : 0;
-        try {
-            g.cancelScheduledValues(t);
-            g.setValueAtTime(g.value, t);
-            g.linearRampToValueAtTime(base + p * 0.22, t + 0.22);
-            g.linearRampToValueAtTime(base + p * 0.10, t + 0.7);
-            g.linearRampToValueAtTime(base, t + 1.9);
-            this._crowdRampUntil = t + 1.9;
-        } catch (e) { /* ignore */ }
-    }
-
     // Hò reo bùng nổ (ghi bàn, tranh cướp hay, hết trận...)
     crowdCheer(power) {
         if (!this.context || !this.crowdGain) return;
