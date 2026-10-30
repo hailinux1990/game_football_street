@@ -82,6 +82,13 @@ class Game {
 
         this.createPlayers();
         this.setupUI();
+
+        // ===== Bình luận viên tiếng Việt =====
+        this.commentary = (typeof window !== 'undefined' && window.Commentary)
+            ? new window.Commentary(this)
+            : null;
+        this._dangerCd = 0;
+        this._goalShotBy = null;
     }
 
     // ===== Chế độ camera (lưu localStorage) =====
@@ -286,6 +293,7 @@ class Game {
         if (!this.refWhistleDone && this.preMatchTimer >= 1.15) {
             this.refWhistleDone = true;
             this.audio.playKickoffWhistle();
+            if (this.commentary) this.commentary.sayKickoff();
             this.showBanner('🔔 TRỌNG TÀI THỔI CÒI — BẮT ĐẦU!', 1.6);
             this.crowdCheer(0.9);
             if (this.referee) this.referee.setAction('celebrate', 0.9);   // giơ tay
@@ -309,6 +317,7 @@ class Game {
         this.refFinalWhistle = false;
         this.hideBanner();
         this.audio.setCrowdLevel(0.5);
+        if (this.commentary) this.commentary.sayEnd(this.redScore, this.blueScore);
         return this.state;
     }
 
@@ -377,6 +386,7 @@ class Game {
         this.menuReturnTimer = 0;
         this.hideBanner();
         this.audio.setCrowdLevel(0.35);
+        if (this.commentary) this.commentary.sayMenu();
         if (typeof this.onReturnToMenu === 'function') this.onReturnToMenu();
         return this.state;
     }
@@ -499,6 +509,9 @@ class Game {
             }
         }
 
+        // --- Bình luận viên: cập nhật phụ đề & tình huống nguy hiểm ---
+        this.updateCommentary(dt);
+
         // --- Trọng tài chạy theo diễn biến ---
         this.updateReferee(dt);
 
@@ -509,6 +522,38 @@ class Game {
         this.particles.update(dt);
 
         // Camera fixed - whole field visible
+    }
+
+    // ===== BÌNH LUẬN VIÊN =====
+    updateCommentary(dt) {
+        if (!this.commentary) return;
+        this.commentary.update(dt);
+
+        // Pha bóng đang bay tới khung thành: hết thời gian chờ thì bỏ đánh dấu
+        if (this._shotInFlight) {
+            this._shotInFlight.timer -= dt;
+            if (this._shotInFlight.timer <= 0) this._shotInFlight = null;
+        }
+
+        // Vùng nguy hiểm: bóng vào 1/4 sân đối phương
+        this._dangerCd = Math.max(0, (this._dangerCd || 0) - dt);
+        const f = this.field;
+        const cp = this.currentControlledPlayer;
+        if (cp && this._dangerCd <= 0) {
+            const attackX = cp.team === 'red' ? f.x + f.width : f.x;
+            const dist = Math.abs(this.ball.pos.x - attackX);
+            if (dist < f.width * 0.22) {
+                this.commentary.sayDanger();
+                this._dangerCd = 9;
+            }
+        }
+    }
+
+    // Sút ra ngoài (bóng đập tường biên) → bình luận
+    commentShotMissed() {
+        if (!this._shotInFlight) return;
+        this._shotInFlight = null;
+        if (this.commentary) this.commentary.sayMiss();
     }
 
     // ===== Trọng tài bám theo diễn biến (không va chạm với cầu thủ) =====
@@ -689,6 +734,7 @@ class Game {
         this.ball.owner = null;
         this.audio.playTone(400, 0.08, 'sine', 0.1);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#fff', 5, { speed: 3 });
+        if (this.commentary) this.commentary.sayPass('pass');
     }
 
     // ===== CHỌC KHE: đường chuyền sệt vào khoảng trống phía trước đồng đội =====
@@ -737,6 +783,7 @@ class Game {
         this.ball.owner = null;
         this.audio.playTone(520, 0.08, 'triangle', 0.1);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#7cf3ff', 6, { speed: 4 });
+        if (this.commentary) this.commentary.sayPass('through');
     }
 
     // ===== CHUYỀN BÓNG BỔNG: bóng bay cao qua đầu hàng phòng ngự =====
@@ -773,6 +820,7 @@ class Game {
         this.ball.owner = null;
         this.audio.playTone(660, 0.12, 'sine', 0.1);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#a8ffce', 8, { speed: 4 });
+        if (this.commentary) this.commentary.sayPass('loft');
     }
 
     // ===== TRANH BÓNG (dùng chung nút với chuyền ngắn) =====
@@ -844,6 +892,7 @@ class Game {
         this.particles.emitBurst(p.pos.x, p.pos.y, '#ffd700', 10);
         this.audio.playTone(420, 0.1, 'square', 0.12);
         this.camera.shake(3, 0.15);
+        if (this.commentary) this.commentary.sayTackle(true);
     }
 
     tryShoot() {
@@ -874,10 +923,12 @@ class Game {
         p.passCooldown = 0.35;
         p.setAction('kick', 0.5);
         this._lastShooter = p;
+        this._shotInFlight = { by: p, timer: 1.6 };
         this.ball.owner = null;
         this.audio.playTone(150, 0.15, 'square', 0.15);
         this.particles.emit(this.ball.pos.x, this.ball.pos.y, '#ffdd00', 8, { speed: 5 });
         this.camera.shake(5, 0.2);
+        if (this.commentary) this.commentary.sayShot(true);
     }
 
     trySkill() {
@@ -1049,6 +1100,10 @@ class Game {
 
             // If GK has the ball, kick it away
             if (p.hasBall) {
+                if (this._shotInFlight && this.commentary) {
+                    this.commentary.saySave();
+                    this._shotInFlight = null;
+                }
                 p.gkKickCd = (p.gkKickCd || 0) - 1;
                 if (p.gkKickCd <= 0) {
                     const dir = isRed ? 0 : Math.PI;
@@ -1106,6 +1161,10 @@ class Game {
                 p.passCooldown = 0.35;
                 p.setAction('kick', 0.5);
                 this._lastShooter = p;
+                this._shotInFlight = { by: p, timer: 1.6 };
+                if (this.commentary && p.team !== this.currentControlledPlayer.team) {
+                    this.commentary.sayShot(false);
+                }
                 return;
             }
 
@@ -1459,12 +1518,14 @@ class Game {
                 if (!inGoalY) {
                     ball.pos.x = f.x + margin;
                     ball.vel.x *= -0.7;
+                    this.commentShotMissed();
                 }
             }
             if (ball.pos.x > f.x + f.width - margin) {
                 if (!inGoalY) {
                     ball.pos.x = f.x + f.width - margin;
                     ball.vel.x *= -0.7;
+                    this.commentShotMissed();
                 }
             }
             // Top/Bottom walls
@@ -1576,6 +1637,11 @@ class Game {
                 this.ball.vel = new Vector2(0, 0);
                 p.setAction('tackle', 0.5);
                 this.particles.emit(p.pos.x, p.pos.y, '#ffd700', 8, { speed: 5 });
+                // Bình luận khi tình huống có liên quan tới đội của người chơi
+                const myTeam = this.currentControlledPlayer ? this.currentControlledPlayer.team : null;
+                if (this.commentary && (p.team === myTeam || owner.team === myTeam)) {
+                    this.commentary.sayTackle(p.team === myTeam);
+                }
                 return;
             }
         }
@@ -1653,6 +1719,10 @@ class Game {
         // Khán đài bùng nổ + trọng tài thổi còi công nhận bàn thắng
         this.crowdCheer(1.5);
         this.audio.playShortWhistle();
+        if (this.commentary) {
+            const min = Math.max(1, Math.ceil((this.matchTotalSeconds - this.matchTimer) / 60));
+            this.commentary.sayGoal(team, this.lastScorer, min, this.redScore, this.blueScore);
+        }
         if (this.referee) {
             const goalSideX = team === 'red' ? this.field.x + this.field.width : this.field.x;
             this.referee.pos = new Vector2(
@@ -2430,6 +2500,61 @@ function initGame() {
     document.getElementById('ai-difficulty').onchange = (e) => { game.difficulty = e.target.value; };
     document.getElementById('sound-enabled').onchange = (e) => { game.audio.setEnabled(e.target.checked); };
 
+    // ===== Bình luận viên tiếng Việt =====
+    const commentaryEnabledEl = document.getElementById('commentary-enabled');
+    const commentaryVoiceEl = document.getElementById('commentary-voice');
+    const commentaryStatusEl = document.getElementById('commentary-voice-status');
+
+    function updateCommentaryStatus() {
+        if (!commentaryStatusEl) return;
+        const c = game.commentary;
+        if (!c) {
+            commentaryStatusEl.className = 'controls-hint-text warn';
+            commentaryStatusEl.textContent = '⚠️ Trình duyệt không hỗ trợ bình luận viên.';
+            return;
+        }
+        if (!c.synth) {
+            commentaryStatusEl.className = 'controls-hint-text warn';
+            commentaryStatusEl.textContent = '⚠️ Trình duyệt không hỗ trợ đọc tiếng (Web Speech API) — vẫn có phụ đề bình luận.';
+            return;
+        }
+        const vi = c.hasVietnameseVoice();
+        if (vi) {
+            commentaryStatusEl.className = 'controls-hint-text ok';
+            commentaryStatusEl.textContent = '✅ Đã tìm thấy giọng tiếng Việt: ' + c.voiceName();
+        } else {
+            commentaryStatusEl.className = 'controls-hint-text warn';
+            commentaryStatusEl.textContent = '⚠️ Máy chưa có giọng tiếng Việt — bình luận vẫn hiện phụ đề, giọng đọc dùng giọng mặc định.';
+        }
+    }
+
+    if (commentaryEnabledEl) {
+        commentaryEnabledEl.checked = game.commentary ? game.commentary.enabled : false;
+        commentaryEnabledEl.onchange = (e) => {
+            if (game.commentary) game.commentary.setEnabled(e.target.checked);
+        };
+    }
+    if (commentaryVoiceEl) {
+        commentaryVoiceEl.checked = game.commentary ? game.commentary.voiceEnabled : false;
+        commentaryVoiceEl.onchange = (e) => {
+            if (game.commentary) game.commentary.setVoiceEnabled(e.target.checked);
+            updateCommentaryStatus();
+        };
+    }
+    const testCommentaryBtn = document.getElementById('btn-test-commentary');
+    if (testCommentaryBtn) {
+        testCommentaryBtn.onclick = () => {
+            if (!game.commentary) return;
+            game.commentary.testVoice();
+            updateCommentaryStatus();
+        };
+    }
+    if (game.commentary) {
+        game.commentary.onVoicesReady = () => updateCommentaryStatus();
+    }
+    updateCommentaryStatus();
+    setTimeout(updateCommentaryStatus, 1200);   // một số trình duyệt nạp giọng chậm
+
     // Chế độ điều khiển: Bàn phím / Tay cầm PS5
     const controlModeEl = document.getElementById('control-mode');
     if (controlModeEl) {
@@ -2723,6 +2848,7 @@ function initGame() {
         }
 
         game.draw();
+        if (game.commentary) game.commentary.update(dt);   // phụ đề bình luận tự mờ
         game.input.update();
 
         requestAnimationFrame(loop);

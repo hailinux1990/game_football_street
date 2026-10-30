@@ -734,3 +734,74 @@ body.mode-3d #game-canvas-3d { display: block; }
 @media (max-width: 760px) {
     .match-banner { font-size: 1.2rem; padding: 10px 22px; letter-spacing: 1.5px; }
 }
+
+/* ==== Bình luận viên (phụ đề trên HUD) ==== */
+.commentary-box {
+    position: absolute;
+    left: 22px;
+    bottom: 96px;
+    max-width: 46%;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 16px 10px 12px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, rgba(8, 13, 26, 0.88), rgba(8, 13, 26, 0.55));
+    border-left: 3px solid #ffd24a;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: none;
+    z-index: 22;
+}
+
+.commentary-box.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.commentary-mic {
+    font-size: 1.1rem;
+    line-height: 1.2;
+    filter: drop-shadow(0 0 6px rgba(255, 210, 74, 0.7));
+}
+
+.commentary-text {
+    text-align: left;
+}
+
+.commentary-line {
+    color: #fff4d2;
+    font-size: 0.98rem;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+.commentary-prev {
+    color: rgba(200, 216, 240, 0.55);
+    font-size: 0.76rem;
+    font-style: italic;
+    margin-bottom: 2px;
+}
+
+.commentary-section {
+    margin-top: 16px;
+}
+
+#commentary-voice-status {
+    margin: 6px 0 8px;
+}
+
+#commentary-voice-status.ok {
+    color: #6ee7a8;
+}
+
+#commentary-voice-status.warn {
+    color: #ffb86b;
+}
+
+@media (max-width: 760px) {
+    .commentary-box { left: 10px; right: 10px; bottom: 84px; max-width: none; }
+    .commentary-line { font-size: 0.82rem; }
+}

@@ -15,9 +15,33 @@ const elementMock = () => ({
     }})
 });
 
+function makeSpeechMock() {
+    const voices = [
+        { name: 'Google Tiếng Việt', lang: 'vi-VN', default: true },
+        { name: 'Microsoft David', lang: 'en-US', default: false }
+    ];
+    const spoken = [];
+    const synth = {
+        spoken,
+        speaking: false,
+        pending: false,
+        getVoices: () => voices,
+        speak(u) { spoken.push(u); this.speaking = true; },
+        cancel() { this.speaking = false; },
+        onvoiceschanged: null
+    };
+    const Utt = function (text) {
+        this.text = text; this.lang = ''; this.voice = null;
+        this.volume = 1; this.rate = 1; this.pitch = 1;
+    };
+    return { synth, Utt };
+}
+
 function createSandbox() {
+    const speech = makeSpeechMock();
     const sandbox = {
-        window: { addEventListener: () => {}, AudioContext: function() {
+        window: { addEventListener: () => {}, speechSynthesis: speech.synth, SpeechSynthesisUtterance: speech.Utt,
+            AudioContext: function() {
             const param = () => ({
                 value: 0,
                 exponentialRampToValueAtTime: () => {},
@@ -49,11 +73,15 @@ function createSandbox() {
                 clear: () => { store = {}; }
             };
         })(),
-        console, Math, JSON, Date, setTimeout, clearTimeout, setInterval, clearInterval
+        console, Math, JSON, Date, setTimeout, clearTimeout, setInterval, clearInterval,
+        performance: { now: () => Date.now() },
+        // Mock Web Speech API (giọng tiếng Việt) để test phần bình luận
+        SpeechSynthesisUtterance: speech.Utt,
+        speechSynthesis: speech.synth
     };
     sandbox.globalThis = sandbox;
     vm.createContext(sandbox);
-    for (const s of ['game.js', 'entities.js', 'field.js', 'ai.js', 'ui.js', 'main.js']) {
+    for (const s of ['game.js', 'entities.js', 'field.js', 'ai.js', 'ui.js', 'commentary.js', 'main.js']) {
         vm.runInContext(fs.readFileSync(path.join(GAME_DIR, s), 'utf8'), sandbox, { filename: s });
     }
     return sandbox;

@@ -72,6 +72,13 @@ Nếu trình duyệt không hỗ trợ WebGL, game tự động quay về chế 
 - **Kết thúc trận**: hiện bảng kết quả (tỉ số, đội thắng) và **tự động trở về MENU CHÍNH sau 8 giây**
   (vẫn có nút TRẬN MỚI / MENU CHÍNH để đi ngay).
 - **Banner kiểu FIFA 99**: `⚽ TRẬN ĐẤU SẮP BẮT ĐẦU` → `🔔 TRỌNG TÀI THỔI CÒI — BẮT ĐẦU!` → `GOAL!!! #9 · 3'`.
+- **🎙️ Bình luận viên tiếng Việt**: phụ đề bình luận hiện ở góc trái màn hình (hộp 🎙️) và **đọc thành tiếng**
+  bằng giọng tiếng Việt của trình duyệt (Web Speech API): giao bóng, chuyền bóng, chọc khe, bóng bổng,
+  sút, thủ môn cứu thua, sút ra ngoài, tranh bóng thành công/mất bóng, bóng vào vùng nguy hiểm,
+  bàn thắng (kèm số áo, phút, tỷ số) và kết thúc trận.
+  - Bật/tắt trong **Cài đặt → 🎙️ BÌNH LUẬN VIÊN (TIẾNG VIỆT)**, có nút **ĐỌC THỬ** và dòng trạng thái
+    cho biết máy đã có giọng tiếng Việt hay chưa (nếu chưa, phụ đề vẫn hiển thị bình thường).
+  - Câu bình luận có giới hạn tần suất (không nói dồn dập), riêng bàn thắng/hết trận luôn được ưu tiên nói ngay.
 
 ## Gameplay (NPC kiểu FIFA 99)
 
