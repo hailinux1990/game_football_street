@@ -688,3 +688,49 @@ body.mode-3d #game-canvas-3d { display: block; }
 @media (orientation: portrait) {
     .camera-badge { font-size: 0.68rem; padding: 6px 12px; }
 }
+
+/* ==== Banner thông báo trong trận (kickoff / GOAL / kết thúc) ==== */
+.match-banner {
+    position: absolute;
+    top: 46%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    padding: 14px 42px;
+    border-radius: 8px;
+    background: linear-gradient(90deg, rgba(10,16,32,0.06), rgba(10,16,32,0.88), rgba(10,16,32,0.06));
+    border-top: 2px solid rgba(255, 210, 74, 0.75);
+    border-bottom: 2px solid rgba(255, 210, 74, 0.75);
+    color: #ffe9a8;
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-shadow: 0 4px 14px rgba(0, 0, 0, 0.85);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 25;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    white-space: nowrap;
+}
+
+.match-banner.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+/* ==== Gợi ý tự động về menu ở bảng kết quả ==== */
+.return-hint {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: #9fb3d1;
+    letter-spacing: 0.5px;
+}
+
+#menu-return-timer {
+    color: #ffd24a;
+    font-weight: 700;
+}
+
+@media (max-width: 760px) {
+    .match-banner { font-size: 1.2rem; padding: 10px 22px; letter-spacing: 1.5px; }
+}

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Street Football 3D - FIFA Street Style</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="style.css?v=20261029c">
+    <link rel="stylesheet" href="style.css?v=20261030a">
 </head>
 <body>
     <div id="game-container">
@@ -57,6 +57,7 @@
                             <select id="camera-mode">
                                 <option value="third">Người thứ ba (sau lưng cầu thủ)</option>
                                 <option value="wide">Toàn cảnh sân bóng</option>
+                                <option value="tv">📺 FIFA 99 (góc cao bám bóng)</option>
                             </select>
                         </label>
                     </div>
@@ -124,7 +125,8 @@
                     <p>Street Football 3D Mini Game</p>
                     <p>Phong cách FIFA Street 3 · đồ hoạ 3D WebGL</p>
                     <p>6 cầu thủ 3D có đầy đủ chân tay, animation sút/chuyền/kỹ thuật</p>
-                    <p>Camera góc nhìn người thứ ba hoặc toàn cảnh sân</p>
+                    <p>Trọng tài NPC thổi còi bắt đầu & kết thúc trận, khán đài có khán giả reo hò</p>
+                    <p>3 góc nhìn: Người thứ ba, Toàn cảnh sân, và FIFA 99 (góc cao bám bóng)</p>
                     <br>
                     <p>Controls:</p>
                     <p>WASD / Mũi tên - Di chuyển cầu thủ</p>
@@ -135,7 +137,7 @@
                     <p>E - Kỹ năng đặc biệt (khi có bóng)</p>
                     <p>Shift - Chạy nhanh (tốn thể lực)</p>
                     <p>Q - Chuyển cầu thủ điều khiển (mũi tên vàng cũng TỰ ĐỘNG chuyển sang người gần bóng nhất khi bị cướp bóng)</p>
-                    <p>C - Đổi góc nhìn (người thứ ba / toàn cảnh)</p>
+                    <p>C - Đổi góc nhìn (người thứ ba → toàn cảnh → FIFA 99)</p>
                     <p>Kéo chuột - xoay camera | Cuộn chuột - zoom</p>
                     <p>ESC - Tạm dừng</p>
                     <br>
@@ -186,6 +188,7 @@
                     </div>
                 </div>
                 <div class="camera-badge" id="camera-mode-badge">🎥 NGƯỜI THỨ BA</div>
+                <div id="match-banner" class="match-banner"></div>
             </div>
 
             <!-- Goal Celebration -->
@@ -202,6 +205,7 @@
                     <h1 id="final-result">KẾT QUẢ</h1>
                     <div class="final-score" id="final-score">0 - 0</div>
                     <p id="match-stats"></p>
+                    <p class="return-hint">Tự động về MENU CHÍNH sau <span id="menu-return-timer">8s</span></p>
                     <div class="menu-buttons">
                         <button id="btn-rematch" class="menu-btn primary">TRẬN MỚI</button>
                         <button id="btn-main-menu" class="menu-btn">MENU CHÍNH</button>
@@ -212,14 +216,14 @@
     </div>
 
     <script src="js/vendor/three.min.js?v=160"></script>
-    <script src="js/game.js?v=20261029c"></script>
-    <script src="js/entities.js?v=20261029c"></script>
-    <script src="js/field.js?v=20261029c"></script>
-    <script src="js/ai.js?v=20261029c"></script>
-    <script src="js/player_model.js?v=20261029c"></script>
-    <script src="js/render3d.js?v=20261029c"></script>
+    <script src="js/game.js?v=20261030a"></script>
+    <script src="js/entities.js?v=20261030a"></script>
+    <script src="js/field.js?v=20261030a"></script>
+    <script src="js/ai.js?v=20261030a"></script>
+    <script src="js/player_model.js?v=20261030a"></script>
+    <script src="js/render3d.js?v=20261030a"></script>
 
-    <script src="js/ui.js?v=20261029c"></script>
-    <script src="js/main.js?v=20261029c"></script>
+    <script src="js/ui.js?v=20261030a"></script>
+    <script src="js/main.js?v=20261030a"></script>
 </body>
 </html>

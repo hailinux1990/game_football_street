@@ -2,6 +2,18 @@
 // STREET FOOTBALL - FULL GAME LOGIC
 // ============================================
 
+// Khoảng cách nhỏ nhất từ điểm p tới đoạn thẳng a-b (dùng để kiểm tra đường chuyền bị chặn)
+function pointToSegmentDist(p, a, b) {
+    const abx = b.x - a.x, aby = b.y - a.y;
+    const apx = p.x - a.x, apy = p.y - a.y;
+    const len2 = abx * abx + aby * aby;
+    let t = len2 > 0 ? (apx * abx + apy * aby) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const cx = a.x + abx * t;
+    const cy = a.y + aby * t;
+    return Math.hypot(p.x - cx, p.y - cy);
+}
+
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -36,15 +48,32 @@ class Game {
 
         // Match vars
         this.matchTimer = 300;
+        this.matchTotalSeconds = 300;
         this.redScore = 0;
         this.blueScore = 0;
         this.possessionTeam = 'red';
         this.goalCelebrationTimer = 0;
         this.difficulty = 'normal';
 
+        // ===== Trọng tài & diễn biến trận =====
+        this.referee = null;              // NPC trọng tài (không tính vào đội hình)
+        this.preMatchTimer = 0;           // đồng hồ đếm của màn dắt đội ra sân
+        this.refWhistleDone = false;
+        this.postMatchTimer = 0;          // đồng hồ của màn kết thúc trận
+        this.refFinalWhistle = false;
+        this.menuReturnTimer = 0;         // tự động về menu chính sau khi hết trận
+        this.menuReturnDelay = 8;         // giây
+        this.bannerTimer = 0;
+
+        // ===== Khán đài / khán giả =====
+        this.crowdIntensity = 0.35;       // 0..1 — càng gay cấn càng ồn
+        this.crowdCheerTimer = 0;
+        this._crowdTick = 0;
+
         // ===== 3D =====
         // 'third'  = góc nhìn người thứ ba (camera sau lưng cầu thủ)
         // 'wide'   = toàn cảnh sân bóng nhỏ
+        // 'tv'     = kiểu FIFA 99: camera cao bám bóng từ khán đài bên sân
         this.cameraMode = 'third';
         this.renderer3d = null;
         this.lastScorer = null;
@@ -59,7 +88,7 @@ class Game {
     loadCameraMode() {
         try {
             const v = localStorage.getItem('sf_camera_mode');
-            if (v === 'third' || v === 'wide') this.cameraMode = v;
+            if (v === 'third' || v === 'wide' || v === 'tv') this.cameraMode = v;
         } catch (e) { /* ignore */ }
     }
 
@@ -68,15 +97,18 @@ class Game {
     }
 
     setCameraMode(mode) {
-        this.cameraMode = (mode === 'wide') ? 'wide' : 'third';
+        this.cameraMode = (mode === 'wide' || mode === 'tv') ? mode : 'third';
         if (this.renderer3d) this.renderer3d.setCameraMode(this.cameraMode);
         this.saveCameraMode();
         if (typeof this.onCameraModeChange === 'function') this.onCameraModeChange(this.cameraMode);
         return this.cameraMode;
     }
 
+    // C: Người thứ ba → Toàn cảnh → FIFA 99 (góc cao bám bóng) → Người thứ ba
     toggleCameraMode() {
-        return this.setCameraMode(this.cameraMode === 'third' ? 'wide' : 'third');
+        const order = ['third', 'wide', 'tv'];
+        const i = order.indexOf(this.cameraMode);
+        return this.setCameraMode(order[(i + 1) % order.length]);
     }
 
     createPlayers() {
@@ -111,6 +143,9 @@ class Game {
         redFWD.isControlled = true;
         redFWD.aiControlled = false;
         redFWD.isHuman = true;
+
+        // ===== Trọng tài (NPC, không thuộc đội nào) =====
+        if (!this.referee) this.referee = createReferee(f.x + f.width / 2, f.y + f.height + 40);
     }
 
     setupUI() {
@@ -120,6 +155,13 @@ class Game {
     resetPositions() {
         const f = this.field;
         const cy = f.y + f.height / 2;
+
+        // Trọng tài bắt đầu từ ngoài đường biên dọc, đi vào vòng tròn giữa sân
+        if (this.referee) {
+            this.referee.pos = new Vector2(f.x + f.width / 2, f.y + f.height + 30);
+            this.referee.action = null;
+            this.referee.actionT = 0;
+        }
 
         // Red team (attacks right, defends left)
         this.teamPlayers.red[0].pos = new Vector2(f.x + 25, cy);
@@ -149,9 +191,11 @@ class Game {
         }
     }
 
+    // Bắt đầu trận ngay (dùng cho test / chế độ nhanh)
     startMatch() {
         this.state = GameState.PLAYING;
         this.matchTimer = 300;
+        this.matchTotalSeconds = 300;
         this.redScore = 0;
         this.blueScore = 0;
         this.possessionTeam = 'red';
@@ -159,21 +203,238 @@ class Game {
 
         this.createPlayers();
         this.resetPositions();
+
+        this.preMatchTimer = 0;
+        this.postMatchTimer = 0;
+        this.menuReturnTimer = 0;
+        this.refWhistleDone = false;
+        this.refFinalWhistle = false;
+        this.crowdIntensity = 0.4;
+        this.hideBanner();
+        this.hideMatchEndScreen();
+        this.updateCrowdAudio();
+    }
+
+    // Bắt đầu trận có nghi thức: trọng tài dắt đội ra sân rồi thổi còi
+    beginMatch() {
+        this.startMatch();
+        this.state = GameState.PRE_MATCH;
+        this.preMatchTimer = 0;
+        this.refWhistleDone = false;
+        this.showBanner('⚽ TRẬN ĐẤU SẮP BẮT ĐẦU', 0);
+        this.updateCrowdAudio();
+        return this.state;
     }
 
     // ============= GAME UPDATE =============
     update(dt) {
         if (this.state === GameState.PLAYING) {
             this.updatePlaying(dt);
+        } else if (this.state === GameState.PRE_MATCH) {
+            this.updatePreMatch(dt);
         } else if (this.state === GameState.GOAL_CELEBRATION) {
             this.goalCelebrationTimer -= dt;
             // Vẫn cập nhật animation ăn mừng của cầu thủ
             for (const p of this.players) p.tickAction(dt);
+            if (this.referee) this.referee.update(dt);
+            this.updateCrowd(dt);
             if (this.goalCelebrationTimer <= 0) {
                 document.getElementById('goal-celebration').classList.add('hidden');
                 this.resetPositions();
                 this.state = GameState.PLAYING;
             }
+        } else if (this.state === GameState.POST_MATCH) {
+            this.updatePostMatch(dt);
+        } else if (this.state === GameState.MATCH_END) {
+            this.updateMatchEndScreen(dt);
+        }
+        this.updateBanner(dt);
+    }
+
+    // ===== NGHI THỨC TRƯỚC TRẬN: trọng tài đi vào sân + thổi còi bắt đầu =====
+    updatePreMatch(dt) {
+        this.deltaTime = dt;
+        this.preMatchTimer += dt;
+        const f = this.field;
+        const cx = f.x + f.width / 2;
+        const cy = f.y + f.height / 2;
+
+        // Cầu thủ đứng đúng vị trí xuất phát, hướng về giữa sân
+        for (const p of this.players) {
+            p.animTime += dt;
+            p.tickAction(dt);
+        }
+
+        // Trọng tài tiến vào vòng tròn giữa sân
+        if (this.referee) {
+            const ref = this.referee;
+            const targetY = cy + 26;                     // hơi lệch xuống để không trùng bóng
+            const dx = cx - ref.pos.x;
+            const dy = targetY - ref.pos.y;
+            const dist = Math.hypot(dx, dy);
+            const step = Math.min(dist, ref.maxSpeed * 0.85 * dt * 60);
+            if (dist > 1) {
+                ref.pos.x += (dx / dist) * step;
+                ref.pos.y += (dy / dist) * step;
+                ref.lastDirX = dx / dist;
+                ref.lastDirY = dy / dist;
+            }
+            ref.update(dt);
+        }
+
+        // Thổi còi khi đã vào vị trí
+        if (!this.refWhistleDone && this.preMatchTimer >= 1.15) {
+            this.refWhistleDone = true;
+            this.audio.playKickoffWhistle();
+            this.showBanner('🔔 TRỌNG TÀI THỔI CÒI — BẮT ĐẦU!', 1.6);
+            this.crowdCheer(0.9);
+            if (this.referee) this.referee.setAction('celebrate', 0.9);   // giơ tay
+            this.particles.emitBurst(cx, cy, '#ffd24a', 18);
+        }
+
+        // Bóng vào cuộc
+        if (this.preMatchTimer >= 1.95) {
+            this.state = GameState.PLAYING;
+            this.matchTimer = this.matchTimer > 0 ? this.matchTimer : 300;
+            this.showBanner('⚽ BẮT ĐẦU!', 1.4);
+        }
+        this.updateCrowd(dt);
+    }
+
+    // ===== KẾT THÚC TRẬN: trọng tài thổi còi kết thúc =====
+    finishMatch() {
+        this.matchTimer = 0;
+        this.state = GameState.POST_MATCH;
+        this.postMatchTimer = 0;
+        this.refFinalWhistle = false;
+        this.hideBanner();
+        this.audio.setCrowdLevel(0.5);
+        return this.state;
+    }
+
+    updatePostMatch(dt) {
+        this.deltaTime = dt;
+        this.postMatchTimer += dt;
+        const f = this.field;
+        const cx = f.x + f.width / 2;
+        const cy = f.y + f.height / 2;
+
+        // Trọng tài chạy về giữa sân
+        if (this.referee) {
+            const ref = this.referee;
+            const dx = cx - ref.pos.x;
+            const dy = (cy + 26) - ref.pos.y;
+            const dist = Math.hypot(dx, dy);
+            const step = Math.min(dist, ref.maxSpeed * dt * 60);
+            if (dist > 1 && this.postMatchTimer < 1.0) {
+                ref.pos.x += (dx / dist) * step;
+                ref.pos.y += (dy / dist) * step;
+            }
+            ref.update(dt);
+        }
+
+        // Thổi còi kết thúc trận
+        if (!this.refFinalWhistle && this.postMatchTimer >= 0.45) {
+            this.refFinalWhistle = true;
+            this.audio.playFinalWhistle();
+            this.crowdCheer(1.4);
+            if (this.referee) this.referee.setAction('celebrate', 1.4);
+            this.particles.emitBurst(cx, cy, '#ffffff', 26);
+        }
+
+        // Hiện bảng kết quả
+        if (this.postMatchTimer >= 1.5) {
+            this.state = GameState.MATCH_END;
+            this.showMatchEnd();
+        }
+        this.updateCrowd(dt);
+    }
+
+    // Bảng kết quả → sau vài giây tự về menu chính
+    updateMatchEndScreen(dt) {
+        this.deltaTime = dt;
+        if (this.referee) this.referee.update(dt);
+        this.updateCrowd(dt);
+        if (this.menuReturnTimer > 0) {
+            this.menuReturnTimer -= dt;
+            const el = document.getElementById('menu-return-timer');
+            if (el) el.textContent = Math.max(0, Math.ceil(this.menuReturnTimer)) + 's';
+            if (this.menuReturnTimer <= 0) this.returnToMainMenu();
+        }
+    }
+
+    hideMatchEndScreen() {
+        const endEl = document.getElementById('match-end');
+        if (endEl) {
+            endEl.classList.add('hidden');
+            endEl.classList.remove('active');
+        }
+    }
+
+    // ===== VỀ MENU CHÍNH =====
+    returnToMainMenu() {
+        this.state = GameState.MENU;
+        this.menuReturnTimer = 0;
+        this.hideBanner();
+        this.audio.setCrowdLevel(0.35);
+        if (typeof this.onReturnToMenu === 'function') this.onReturnToMenu();
+        return this.state;
+    }
+
+    // ===== BANNER THÔNG BÁO (kickoff / kết thúc / bàn thắng) =====
+    showBanner(text, duration) {
+        const el = document.getElementById('match-banner');
+        if (!el) return;
+        el.textContent = text;
+        el.classList.add('show');
+        this.bannerTimer = duration || 0;
+    }
+
+    hideBanner() {
+        const el = document.getElementById('match-banner');
+        if (el) el.classList.remove('show');
+        this.bannerTimer = 0;
+    }
+
+    updateBanner(dt) {
+        if (this.bannerTimer > 0) {
+            this.bannerTimer -= dt;
+            if (this.bannerTimer <= 0) this.hideBanner();
+        }
+    }
+
+    // ===== ĐỘ ỒN KHÁN ĐÀI THEO DIỄN BIẾN =====
+    crowdCheer(power) {
+        this.crowdCheerTimer = Math.max(this.crowdCheerTimer || 0, 1.6);
+        this.crowdIntensity = Math.min(1, (this.crowdIntensity || 0) + 0.35);
+        this.audio.crowdCheer(power || 1);
+        if (this.renderer3d && this.renderer3d.crowdJump) this.renderer3d.crowdJump(power || 1);
+    }
+
+    updateCrowd(dt) {
+        // Nền: càng gần khung thành / bóng càng gần khung thành càng ồn
+        const f = this.field;
+        const b = this.ball.pos;
+        const distGoal = Math.min(
+            Math.abs(b.x - f.x), Math.abs(b.x - (f.x + f.width))
+        );
+        const tension = Math.max(0, 1 - distGoal / (f.width * 0.55));
+        this.crowdCheerTimer = Math.max(0, (this.crowdCheerTimer || 0) - dt);
+        const target = this.state === GameState.MENU ? 0.3
+            : Math.min(1, 0.38 + tension * 0.42 + (this.crowdCheerTimer > 0 ? 0.3 : 0));
+        this.crowdIntensity = this.crowdIntensity + (target - this.crowdIntensity) * Math.min(1, dt * 2.2);
+
+        // Cập nhật âm thanh ~4 lần/giây cho nhẹ
+        this._crowdTick = (this._crowdTick || 0) + dt;
+        if (this._crowdTick > 0.25) {
+            this._crowdTick = 0;
+            this.updateCrowdAudio();
+        }
+    }
+
+    updateCrowdAudio() {
+        if (typeof this.audio.setCrowdLevel === 'function' && this.audio.context) {
+            this.audio.setCrowdLevel(this.crowdIntensity || 0.35);
         }
     }
 
@@ -182,9 +443,8 @@ class Game {
         this.matchTimer -= dt;
 
         if (this.matchTimer <= 0) {
-            this.matchTimer = 0;
-            this.state = GameState.MATCH_END;
-            this.showMatchEnd();
+            // Hết giờ → trọng tài thổi còi kết thúc (POST_MATCH) rồi mới hiện bảng kết quả
+            this.finishMatch();
             return;
         }
 
@@ -239,10 +499,59 @@ class Game {
             }
         }
 
+        // --- Trọng tài chạy theo diễn biến ---
+        this.updateReferee(dt);
+
+        // --- Khán đài ---
+        this.updateCrowd(dt);
+
         // --- Particles ---
         this.particles.update(dt);
 
         // Camera fixed - whole field visible
+    }
+
+    // ===== Trọng tài bám theo diễn biến (không va chạm với cầu thủ) =====
+    updateReferee(dt) {
+        const ref = this.referee;
+        if (!ref) return;
+        const f = this.field;
+        const b = this.ball.pos;
+        const owner = this.ball.owner;
+
+        // Đứng chếch về phía bóng, tránh đường bóng đi
+        const offX = -60;
+        const offY = (b.y < f.y + f.height / 2) ? 58 : -58;
+        let tx = b.x + offX;
+        let ty = b.y + offY;
+        tx = Math.max(f.x + 24, Math.min(f.x + f.width - 24, tx));
+        ty = Math.max(f.y + 24, Math.min(f.y + f.height - 24, ty));
+
+        const dx = tx - ref.pos.x;
+        const dy = ty - ref.pos.y;
+        const dist = Math.hypot(dx, dy);
+        const speed = owner && dist < 220 ? ref.maxSpeed : ref.maxSpeed * 0.72;
+        if (dist > 6) {
+            const step = Math.min(dist, speed * dt * 60);
+            ref.pos.x += (dx / dist) * step;
+            ref.pos.y += (dy / dist) * step;
+            ref.lastDirX = dx / dist;
+            ref.lastDirY = dy / dist;
+        }
+
+        // Tránh chen vào cầu thủ
+        for (const p of this.players) {
+            const d = ref.pos.dist(p.pos);
+            const minD = ref.radius + p.radius + 8;
+            if (d > 0.01 && d < minD) {
+                const nx = (ref.pos.x - p.pos.x) / d;
+                const ny = (ref.pos.y - p.pos.y) / d;
+                ref.pos.x = p.pos.x + nx * minD;
+                ref.pos.y = p.pos.y + ny * minD;
+            }
+        }
+        this.clampPlayerToField(ref);
+        ref.update(dt);
     }
 
     handleHumanInput(dt) {
@@ -770,6 +1079,13 @@ class Game {
                 if (d < nearestDist) { nearestDist = d; nearestOpp = opp; }
             }
 
+            // Nhịp ra quyết định nhanh kiểu FIFA 99: bóng luân chuyển liên tục
+            p.aiDecisionCd = Math.max(0, (p.aiDecisionCd || 0) - dt);
+            if (p.aiDecisionCd <= 0) {
+                p.aiDecisionCd = 0.14 + Math.random() * 0.12;
+                p.aiPassOption = this.bestPassOption(p, goalX, goalY);
+            }
+
             // Shoot when in range (increased range)
             if (distToGoal < 380 && (nearestDist < 65 || Math.random() < 0.10)) {
                 let oppGK = null;
@@ -793,25 +1109,34 @@ class Game {
                 return;
             }
 
-            // Pass if under heavy pressure and far from goal
-            if (nearestDist < 30 && distToGoal > 380) {
-                const mates = p.teamMates.filter(m => m.active && m.role !== Role.GK);
-                if (mates.length > 0) {
-                    let bestMate = mates[0], bestScore = -Infinity;
-                    for (const m of mates) {
-                        const mGoalDist = Math.hypot(m.pos.x - goalX, m.pos.y - goalY);
-                        const mOppDist = Math.min(...p.opponents.filter(o => o.active).map(o => m.pos.dist(o.pos)));
-                        const score = -mGoalDist + mOppDist * 2;
-                        if (score > bestScore) { bestScore = score; bestMate = m; }
-                    }
-                    const passAngle = Math.atan2(bestMate.pos.y - p.pos.y, bestMate.pos.x - p.pos.x);
-                    this.ball.vel = Vector2.fromAngle(passAngle, 18);
-                    this.ball.owner = null;
-                    p.hasBall = false;
-                    p.passCooldown = 0.35;
-                    p.setAction('pass', 0.32);
+            // ===== CHUYỀN BÓNG: ưu tiên phối hợp nhanh, luân chuyển bóng liên tục =====
+            const opt = p.aiPassOption;
+            if (opt && opt.mate) {
+                // Bị áp sát thì buộc phải chuyền; có phương án tốt thì chuyền sớm
+                const forced = nearestDist < 46;
+                const wantsPass = forced
+                    || opt.score > 46
+                    || (opt.score > 22 && Math.random() < 0.5)
+                    || (nearestDist < 105 && opt.score > 8);
+                if (wantsPass) {
+                    this.aiPass(p, opt.mate, opt.loft);
                     return;
                 }
+            }
+
+            // Bí bóng ở sân nhà → phá bóng dài lên phía trên
+            const ownGoalX = p.team === 'red' ? this.field.x : this.field.x + this.field.width;
+            if (nearestDist < 55 && Math.abs(p.pos.x - ownGoalX) < 190) {
+                const dir = p.team === 'red' ? 0 : Math.PI;
+                const ang = dir + (Math.random() - 0.5) * 0.7;
+                this.ball.vel = Vector2.fromAngle(ang, 22);
+                this.ball.hasPhysics = true;
+                this.ball.height = 0; this.ball.heightVel = 0;
+                this.ball.owner = null;
+                p.hasBall = false;
+                p.passCooldown = 0.35;
+                p.setAction('kick', 0.4);
+                return;
             }
 
             // Dribble toward goal, sidestepping defenders
@@ -874,6 +1199,68 @@ class Game {
         this.aiHoldShape(p, ownGoalX, midY, bPos);
     }
 
+    // ===== Chọn phương án chuyền tốt nhất (kiểu FIFA 99: chuyền nhanh, ít rê bóng) =====
+    bestPassOption(p, goalX, goalY) {
+        const dir = p.team === 'red' ? 1 : -1;
+        const mates = p.teamMates.filter(m => m.active && m.role !== Role.GK);
+        let best = null;
+        for (const m of mates) {
+            const d = p.pos.dist(m.pos);
+            if (d < 32 || d > 470) continue;
+
+            // độ thoáng của người nhận
+            let open = 999;
+            for (const o of p.opponents) {
+                if (!o.active) continue;
+                const od = m.pos.dist(o.pos);
+                if (od < open) open = od;
+            }
+            // bị chặn đường chuyền?
+            let lane = 999;
+            for (const o of p.opponents) {
+                if (!o.active) continue;
+                const d2 = pointToSegmentDist(o.pos, p.pos, m.pos);
+                if (d2 < lane) lane = d2;
+            }
+            const ahead = (m.pos.x - p.pos.x) * dir;
+            const mGoalDist = Math.hypot(m.pos.x - goalX, m.pos.y - goalY);
+
+            let score = Math.min(open, 190) * 0.55
+                + ahead * 0.32
+                - d * 0.16
+                - (lane < 26 ? (26 - lane) * 2.2 : 0)
+                + (200 - Math.min(mGoalDist, 200)) * 0.12;
+            if (m.role === Role.FWD) score += 8;
+
+            // Bóng bổng khi bị chặn hẳn ở cự ly xa
+            const loft = lane < 26 && d > 170 && open > 70;
+
+            if (!best || score > best.score) best = { mate: m, score, loft, dist: d, lane };
+        }
+        return best;
+    }
+
+    // AI thực hiện đường chuyền
+    aiPass(p, mate, loft) {
+        const angle = Math.atan2(mate.pos.y - p.pos.y, mate.pos.x - p.pos.x);
+        if (loft) {
+            this.ball.vel = Vector2.fromAngle(angle, 14);
+            this.ball.height = 2;
+            this.ball.heightVel = 9.0;
+        } else {
+            this.ball.vel = Vector2.fromAngle(angle, 19);
+            this.ball.height = 0;
+            this.ball.heightVel = 0;
+        }
+        this.ball.hasPhysics = true;
+        this.ball.owner = null;
+        p.hasBall = false;
+        p.passCooldown = 0.3;
+        p.setAction('pass', 0.3);
+        p.aiDecisionCd = 0.25;
+        this.audio.playTone(380 + Math.random() * 60, 0.06, 'sine', 0.07);
+    }
+
     // ----- Đồng đội có bóng: chạy chỗ tạo khoảng trống để nhận chuyền -----
     aiSupportRun(p, owner, oppGoalX, midY) {
         const f = this.field;
@@ -881,11 +1268,23 @@ class Game {
         const wing = p.wing || (p.pos.y < midY ? -1 : 1);
 
         // Vị trí hỗ trợ: phía trước người giữ bóng, dạt cánh theo wing
-        let ahead = p.role === Role.FWD ? 190 : (p.role === Role.MID ? 130 : 85);
+        let ahead = p.role === Role.FWD ? 190 : (p.role === Role.MID ? 130 : 110);
         let spread = p.role === Role.FWD ? 130 : (p.role === Role.MID ? 95 : 70);
 
+        // Người giữ bóng đang ở sát khung thành đối phương → tiền đạo lao vào vòng cấm
+        const ownerToGoal = Math.abs(oppGoalX - owner.pos.x);
+        if (p.role === Role.FWD && ownerToGoal < 260) {
+            ahead = 95;
+            spread = 55 + Math.random() * 25;
+        }
+        // Tiền vệ dâng lên hỗ trợ khi đội đang tấn công
+        if (p.role === Role.MID) ahead += Math.max(0, 1 - ownerToGoal / 620) * 70;
+
+        // Chạy chỗ: tiến lên theo trục dọc sân trước, rồi mới dạt cánh dần
+        // (giúp đội luôn có người phía trên bóng như FIFA 99)
         let tx = owner.pos.x + attackDir * ahead;
-        let ty = midY + wing * spread;
+        const desiredY = midY + wing * spread;
+        let ty = p.pos.y + (desiredY - p.pos.y) * 0.55;
 
         // Tránh đối thủ: nếu điểm đến gần đối thủ thì lùi/trượt ra vùng trống
         for (const opp of p.opponents) {
@@ -912,8 +1311,21 @@ class Game {
         tx = Math.max(f.x + m, Math.min(f.x + f.width - m, tx));
         ty = Math.max(f.y + m, Math.min(f.y + f.height - m, ty));
 
-        const ang = Math.atan2(ty - p.pos.y, tx - p.pos.x);
-        const spd = p.maxSpeed * 0.88;
+        let ang = Math.atan2(ty - p.pos.y, tx - p.pos.x);
+
+        // Không chạy xuyên qua người đang giữ bóng (tránh va chạm / mất bóng oan)
+        const dOwnerNow = p.pos.dist(owner.pos);
+        if (dOwnerNow < 120) {
+            const toOwner = Math.atan2(owner.pos.y - p.pos.y, owner.pos.x - p.pos.x);
+            let diff = ang - toOwner;
+            while (diff > Math.PI) diff -= 2 * Math.PI;
+            while (diff < -Math.PI) diff += 2 * Math.PI;
+            if (Math.abs(diff) < 0.6) {
+                ang = toOwner + (diff >= 0 ? 0.9 : -0.9);
+            }
+        }
+
+        const spd = p.maxSpeed * 0.95;
         p.pos.x += Math.cos(ang) * spd;
         p.pos.y += Math.sin(ang) * spd;
     }
@@ -1238,12 +1650,32 @@ class Game {
         );
         this.camera.shake(10, 0.4);
 
+        // Khán đài bùng nổ + trọng tài thổi còi công nhận bàn thắng
+        this.crowdCheer(1.5);
+        this.audio.playShortWhistle();
+        if (this.referee) {
+            const goalSideX = team === 'red' ? this.field.x + this.field.width : this.field.x;
+            this.referee.pos = new Vector2(
+                goalSideX + (team === 'red' ? -70 : 70),
+                this.field.y + this.field.height / 2
+            );
+            this.referee.setAction('celebrate', 1.2);
+        }
+
+        // Banner kiểu FIFA 99: GOAL!!! + số phút + người ghi bàn
+        const minute = Math.max(1, Math.ceil((this.matchTotalSeconds - this.matchTimer) / 60));
+        const scorerName = (this.lastScorer && this.lastScorer.playerNum) ? ('#' + this.lastScorer.playerNum + ' ') : '';
+        this.showBanner('GOAL!!! ' + scorerName + '· ' + minute + "'", 1.9);
+
         const el = document.getElementById('goal-celebration');
         if (el) {
             const goalText = document.getElementById('goal-text');
             const scorerText = document.getElementById('scorer-text');
-            if (goalText) goalText.textContent = text;
-            if (scorerText) scorerText.textContent = '';
+            // Kiểu FIFA 99: GOAL!!! + số áo + phút thi đấu
+            if (goalText) goalText.textContent = 'GOAL!!!';
+            if (scorerText) {
+                scorerText.textContent = (scorerName ? scorerName.trim() + '  ·  ' : '') + minute + "'  ·  " + text;
+            }
             el.classList.remove('hidden');
             el.classList.add('active');
         }
@@ -1251,14 +1683,24 @@ class Game {
     }
 
     showMatchEnd() {
-        document.getElementById('match-end').classList.remove('hidden');
+        const endEl = document.getElementById('match-end');
+        if (endEl) {
+            endEl.classList.remove('hidden');
+            endEl.classList.add('active');
+        }
         const redWin = this.redScore > this.blueScore;
         const draw = this.redScore === this.blueScore;
         document.getElementById('final-result').textContent = draw ? 'HÒA!' : (redWin ? 'ĐỘI ĐỎ THẮNG!' : 'ĐỘI XANH THẮNG!');
         document.getElementById('final-score').textContent = `${this.redScore} - ${this.blueScore}`;
         const winner = redWin ? 'ĐỎ' : (draw ? 'Cả hai' : 'XANH');
-        document.getElementById('match-stats').textContent = `Kết thúc trận đấu • ${winner} giành chiến thắng`;
-        this.audio.playWhistle();
+        document.getElementById('match-stats').textContent =
+            `Kết thúc trận đấu • ${winner} giành chiến thắng`;
+        // Đếm ngược tự động về menu chính
+        this.menuReturnTimer = this.menuReturnDelay || 8;
+        const timerEl = document.getElementById('menu-return-timer');
+        if (timerEl) timerEl.textContent = Math.ceil(this.menuReturnTimer) + 's';
+        this.hideBanner();
+        this.crowdCheer(1);
     }
 
     updateHUD() {
@@ -1314,6 +1756,9 @@ class Game {
 
         // Camera transform
         this.camera.apply(ctx);
+
+        // --- KHÁN ĐÀI (2D) ---
+        this.drawStands2D(ctx);
 
         // --- FIELD ---
         // Outer pavement/court
@@ -1382,6 +1827,9 @@ class Game {
             this.drawPlayer(ctx, p);
         }
 
+        // Trọng tài
+        if (this.referee) this.drawPlayer(ctx, this.referee);
+
         // Draw ball
         this.drawBall(ctx);
 
@@ -1390,6 +1838,65 @@ class Game {
 
         // Reset camera
         this.camera.reset(ctx);
+    }
+
+    // ===== KHÁN ĐÀI 2D: các tầng ghế + khán giả nhấp nhô reo hò =====
+    drawStands2D(ctx) {
+        const f = this.field;
+        const depth = 46;
+        const tiers = 3;
+        const t = Date.now() / 1000;
+
+        if (!this._crowdDots) {
+            // Sinh khán giả 1 lần, giữ cố định vị trí
+            this._crowdDots = [];
+            for (let side = 0; side < 2; side++) {
+                const baseY = side === 0 ? f.y - 18 : f.y + f.height + 18;
+                for (let tier = 0; tier < tiers; tier++) {
+                    for (let i = 0; i < 90; i++) {
+                        this._crowdDots.push({
+                            side,
+                            tier,
+                            x: f.x - 40 + (i / 90) * (f.width + 80) + (Math.random() - 0.5) * 6,
+                            y: baseY + (side === 0 ? -tier : tier) * 13,
+                            c: ['#e94560', '#4ecdc4', '#ffd166', '#a06cd5', '#06d6a0', '#ffffff', '#ff8b3d'][Math.floor(Math.random() * 7)],
+                            ph: Math.random() * Math.PI * 2,
+                            amp: 1 + Math.random() * 2
+                        });
+                    }
+                }
+            }
+        }
+
+        // Thân khán đài
+        for (let side = 0; side < 2; side++) {
+            const y0 = side === 0 ? f.y - 18 - (tiers - 1) * 13 - 8 : f.y + f.height + 18 + 8;
+            ctx.fillStyle = side === 0 ? '#232838' : '#1b2030';
+            ctx.fillRect(f.x - 48, y0, f.width + 96, tiers * 13 + 16);
+            // mái che
+            ctx.fillStyle = 'rgba(120,140,180,0.25)';
+            ctx.fillRect(f.x - 48, side === 0 ? y0 - 6 : y0 + tiers * 13 + 12, f.width + 96, 6);
+        }
+
+        // Khán giả
+        const jump = 1.3 + (this.crowdIntensity || 0.35) * 4.5 + (this.crowdCheerTimer > 0 ? 3 : 0);
+        for (const d of this._crowdDots) {
+            const bob = Math.sin(t * 6 + d.ph) * d.amp * (0.5 + (this.crowdIntensity || 0.3));
+            ctx.fillStyle = d.c;
+            ctx.globalAlpha = 0.85;
+            ctx.fillRect(d.x, d.y + bob - jump * 0.25, 3.4, 4.2);
+            ctx.globalAlpha = 1;
+        }
+
+        // Biển quảng cáo
+        const boardColors = ['#e94560', '#2fb3c9', '#ffd166', '#a06cd5'];
+        for (let i = 0; i < 6; i++) {
+            ctx.fillStyle = boardColors[i % 4];
+            ctx.globalAlpha = 0.85;
+            ctx.fillRect(f.x + 20 + i * 130, f.y - 14, 118, 8);
+            ctx.fillRect(f.x + 20 + i * 130, f.y + f.height + 6, 118, 8);
+            ctx.globalAlpha = 1;
+        }
     }
 
     drawGoal(ctx, x, y, side) {
@@ -1440,10 +1947,11 @@ class Game {
         const bodyH = r * 0.62;
         const bodyCY = cy + r * 0.28;
 
-        // Colors - Nekketsu palette (limited, vivid)
-        const jersey = isRed ? '#e94560' : '#4ecdc4';
-        const jerseyDark = isRed ? '#8f1f3a' : '#1f6f6b';
-        const jerseyLight = isRed ? '#ff8fa3' : '#a0ffff';
+        // Colors - Nekketsu palette (limited, vivid). Trọng tài: áo đen, viền vàng.
+        const isRef = p.team === 'ref' || p.isReferee;
+        const jersey = isRef ? '#141821' : (isRed ? '#e94560' : '#4ecdc4');
+        const jerseyDark = isRef ? '#080a0f' : (isRed ? '#8f1f3a' : '#1f6f6b');
+        const jerseyLight = isRef ? '#ffd24a' : (isRed ? '#ff8fa3' : '#a0ffff');
         const skin = '#f5cba7';
         const skinDark = '#d9a67a';
         const hair = isRed ? '#2a1508' : '#151515';
@@ -1863,7 +2371,8 @@ function initGame() {
     document.getElementById('btn-play').onclick = () => {
         hide('main-menu');
         show('game-hud');
-        game.startMatch();
+        game.hideMatchEndScreen();
+        game.beginMatch();          // trọng tài dắt đội ra sân + thổi còi
     };
     document.getElementById('btn-settings').onclick = () => { hide('main-menu'); show('settings-screen'); };
     document.getElementById('btn-credits').onclick = () => { hide('main-menu'); show('credits-screen'); };
@@ -1887,25 +2396,34 @@ function initGame() {
     };
     document.getElementById('btn-restart').onclick = () => {
         hide('pause-menu');
-        hide('match-end');
-        game.startMatch();
+        game.hideMatchEndScreen();
+        game.beginMatch();
     };
     document.getElementById('btn-quit-menu').onclick = () => {
         hide('pause-menu');
         hide('game-hud');
-        hide('match-end');
+        game.hideMatchEndScreen();
         show('main-menu');
-        game.state = GameState.MENU;
+        game.returnToMainMenu();
     };
     document.getElementById('btn-rematch').onclick = () => {
-        hide('match-end');
-        game.startMatch();
+        game.hideMatchEndScreen();
+        show('game-hud');
+        game.beginMatch();
     };
     document.getElementById('btn-main-menu').onclick = () => {
-        hide('match-end');
+        game.hideMatchEndScreen();
         hide('game-hud');
         show('main-menu');
-        game.state = GameState.MENU;
+        game.returnToMainMenu();
+    };
+
+    // Hết thời gian chờ ở bảng kết quả -> tự động hiển thị menu chính
+    game.onReturnToMenu = () => {
+        game.hideMatchEndScreen();
+        hide('game-hud');
+        hide('pause-menu');
+        show('main-menu');
     };
 
     // Settings
@@ -1944,7 +2462,9 @@ function initGame() {
     function updateCameraBadge() {
         const badge = document.getElementById('camera-mode-badge');
         if (badge) {
-            badge.textContent = game.cameraMode === 'wide' ? '🎥 TOÀN CẢNH' : '🎥 NGƯỜI THỨ BA';
+            badge.textContent = game.cameraMode === 'wide' ? '🎥 TOÀN CẢNH'
+                : game.cameraMode === 'tv' ? '📺 FIFA 99'
+                : '🎥 NGƯỜI THỨ BA';
         }
         const sel = document.getElementById('camera-mode');
         if (sel) sel.value = game.cameraMode;
@@ -2197,7 +2717,7 @@ function initGame() {
 
         game.input.pollGamepad();   // đọc tay cầm mỗi frame
 
-        if (game.state === GameState.PLAYING || game.state === GameState.GOAL_CELEBRATION) {
+        if (game.state !== GameState.MENU && game.state !== GameState.PAUSED) {
             game.update(dt);
             game.updateHUD();
         }

@@ -18,9 +18,24 @@ const elementMock = () => ({
 function createSandbox() {
     const sandbox = {
         window: { addEventListener: () => {}, AudioContext: function() {
-            this.createGain = () => ({ connect: () => {}, gain: { value: 0, exponentialRampToValueAtTime: () => {} } });
-            this.createOscillator = () => ({ connect: () => {}, frequency: { value: 0 }, start: () => {}, stop: () => {}, type: '' });
-            this.destination = {}; this.currentTime = 0;
+            const param = () => ({
+                value: 0,
+                exponentialRampToValueAtTime: () => {},
+                linearRampToValueAtTime: () => {},
+                setValueAtTime: () => {},
+                cancelScheduledValues: () => {}
+            });
+            const node = () => ({ connect: () => {}, disconnect: () => {}, gain: param(),
+                frequency: param(), Q: param(), type: '', buffer: null,
+                start: () => {}, stop: () => {}, loop: false, loopStart: 0, loopEnd: 0 });
+            this.sampleRate = 44100;
+            this.createGain = node;
+            this.createBiquadFilter = node;
+            this.createBufferSource = node;
+            this.createBuffer = (ch, len) => ({ getChannelData: () => new Float32Array(len), length: len, numberOfChannels: ch });
+            this.createOscillator = node;
+            this.destination = {};
+            this.currentTime = 0;
         }},
         document: { readyState: 'loading', addEventListener: () => {}, getElementById: elementMock, createElement: () => ({}) },
         requestAnimationFrame: () => {}, addEventListener: () => {},

@@ -200,6 +200,25 @@ function createGoalkeeper(x, y, team) {
     return keeper;
 }
 
+// ===== TRỌNG TÀI (NPC) =====
+// Không nằm trong danh sách cầu thủ thi đấu nên không bị AI/vật lý tác động.
+function createReferee(x, y) {
+    const ref = new Player(x, y, 12, 'ref', false);
+    ref.setRole(Role.MID);
+    ref.isReferee = true;
+    ref.team = 'ref';
+    ref.isHuman = false;
+    ref.aiControlled = false;
+    ref.hasBall = false;
+    ref.maxSpeed = 6;
+    ref.color = '#141821';
+    ref.outlineColor = '#ffd24a';
+    ref.playerNum = 0;
+    ref.hairStyle = 1;
+    ref.action = null;
+    return ref;
+}
+
 function createPlayer(x, y, team, isHuman, role) {
     const player = new Player(x, y, 13, team, isHuman);
     player.setRole(role);
@@ -213,4 +232,5 @@ function createPlayer(x, y, team, isHuman, role) {
 window.Player = Player;
 window.AIPlayer = AIPlayer;
 window.createGoalkeeper = createGoalkeeper;
+window.createReferee = createReferee;
 window.createPlayer = createPlayer;

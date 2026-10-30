@@ -233,8 +233,74 @@ class AudioManager {
             this.masterGain = this.context.createGain();
             this.masterGain.connect(this.context.destination);
             this.masterGain.gain.value = 0.5;
+            this.initCrowd();
         } catch (e) {
             console.warn('Audio not supported');
+        }
+    }
+
+    // ===== TIẾNG KHÁN ĐÀI =====
+    // Tiếng ồn nền của khán giả (nhiễu nâu qua bandpass, lặp vô hạn).
+    initCrowd() {
+        if (!this.context || this.crowdSource) return;
+        if (typeof this.context.createBuffer !== 'function' || typeof this.context.createBufferSource !== 'function') return;
+        const sr = this.context.sampleRate;
+        const len = Math.floor(sr * 2.5);
+        const buf = this.context.createBuffer(1, len, sr);
+        const data = buf.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < len; i++) {
+            const w = Math.random() * 2 - 1;
+            last = (last + 0.03 * w) / 1.03;      // nhiễu nâu -> nghe như đám đông
+            data[i] = last * 3.2;
+        }
+        const src = this.context.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        const band = this.context.createBiquadFilter();
+        band.type = 'bandpass';
+        band.frequency.value = 780;
+        band.Q.value = 0.6;
+        const gain = this.context.createGain();
+        gain.gain.value = 0;
+        src.connect(band);
+        band.connect(gain);
+        gain.connect(this.masterGain);
+        try { src.start(); } catch (e) { /* ignore */ }
+        this.crowdSource = src;
+        this.crowdGain = gain;
+        this.crowdBand = band;
+        this.crowdLevel = 0.4;
+        this.setCrowdLevel(this.crowdLevel);
+    }
+
+    // 0..1 : độ ồn của khán đài
+    setCrowdLevel(level) {
+        const v = Math.max(0, Math.min(1, level));
+        this.crowdLevel = v;
+        if (this.crowdGain && this.context) {
+            this.crowdGain.gain.value = this.enabled ? 0.10 + v * 0.22 : 0;
+        }
+        if (this.crowdBand && this.context) {
+            this.crowdBand.frequency.value = 620 + v * 700;
+        }
+    }
+
+    // Hò reo bùng nổ (ghi bàn, tranh cướp hay, hết trận...)
+    crowdCheer(power) {
+        if (!this.context || !this.crowdGain) return;
+        const p = Math.max(0.25, Math.min(1.6, power || 1));
+        const g = this.crowdGain.gain;
+        const t = this.context.currentTime;
+        const base = this.enabled ? 0.10 + this.crowdLevel * 0.22 : 0;
+        g.cancelScheduledValues(t);
+        g.setValueAtTime(g.value, t);
+        g.linearRampToValueAtTime(base + p * 0.55, t + 0.18);
+        g.linearRampToValueAtTime(base + p * 0.34, t + 1.1);
+        g.linearRampToValueAtTime(base, t + 2.6);
+        // tiếng huýt sáo/hò reo ngẫu nhiên
+        for (let i = 0; i < 3; i++) {
+            setTimeout(() => this.playTone(700 + Math.random() * 900, 0.35, 'triangle', 0.05 * p), 60 + i * 180);
         }
     }
 
@@ -261,6 +327,53 @@ class AudioManager {
     }
 
     playKick() { this.playTone(120, 0.1, 'square', 0.15); }
+
+    // Tiếng còi trọng tài (rít, cao)
+    blareWhistle(duration, volume) {
+        if (!this.enabled || !this.context) return;
+        const t = this.context.currentTime;
+        const osc = this.context.createOscillator();
+        const osc2 = this.context.createOscillator();
+        const gain = this.context.createGain();
+        const trem = this.context.createOscillator();
+        const tremGain = this.context.createGain();
+        osc.type = 'triangle';
+        osc2.type = 'sine';
+        osc.frequency.value = 2350;
+        osc2.frequency.value = 4700;
+        // rung giọng nhẹ như còi thật
+        trem.frequency.value = 32;
+        tremGain.gain.value = 60;
+        trem.connect(tremGain);
+        tremGain.connect(osc.frequency);
+        osc.connect(gain);
+        osc2.connect(gain);
+        gain.connect(this.masterGain);
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.linearRampToValueAtTime(volume || 0.16, t + 0.02);
+        gain.gain.setValueAtTime(volume || 0.16, t + duration - 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+        osc.start(t); osc2.start(t); trem.start(t);
+        osc.stop(t + duration + 0.02);
+        osc2.stop(t + duration + 0.02);
+        trem.stop(t + duration + 0.02);
+    }
+
+    // Còi bắt đầu trận: 2 tiếng ngắn
+    playKickoffWhistle() {
+        this.blareWhistle(0.22, 0.16);
+        setTimeout(() => this.blareWhistle(0.5, 0.17), 330);
+    }
+
+    // Còi kết thúc trận: 3 tiếng (2 ngắn + 1 dài)
+    playFinalWhistle() {
+        this.blareWhistle(0.28, 0.17);
+        setTimeout(() => this.blareWhistle(0.28, 0.17), 380);
+        setTimeout(() => this.blareWhistle(0.95, 0.18), 800);
+    }
+
+    // Tiếng tuýt còi ngắn khi bắt lỗi / thổi phạt
+    playShortWhistle() { this.blareWhistle(0.18, 0.13); }
     playGoal() { 
         this.playTone(440, 0.2, 'triangle', 0.2);
         setTimeout(() => this.playTone(554, 0.2, 'triangle', 0.2), 100);
@@ -706,10 +819,12 @@ class InputManager {
 // Game State Enum
 const GameState = {
     MENU: 'menu',
+    PRE_MATCH: 'pre_match',      // trọng tài dắt đội ra sân + thổi còi bắt đầu
     PLAYING: 'playing',
     PAUSED: 'paused',
     GOAL_CELEBRATION: 'goal_celebration',
-    MATCH_END: 'match_end'
+    MATCH_END: 'match_end',
+    POST_MATCH: 'post_match'     // trọng tài thổi còi kết thúc, hiện bảng kết quả
 };
 
 // Team Enum

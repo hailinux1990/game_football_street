@@ -89,11 +89,14 @@
             this.focusPos = new THREE.Vector3(0, 0, 0);
             this.models = new Map();
             this.prevControlled = null;
+            this.refereeModel = null;
+            this._crowdAcc = 0;
 
             // ---- Dựng cảnh ----
             this.buildSky();
             this.buildGround();
             this.buildWalls();
+            this.buildStands();
             this.buildGoals();
             this.buildProps();
             this.buildLights();
@@ -334,6 +337,180 @@
             addWall(P.w + T * 2 + 60, T, P.cx, P.z1 + T / 2 + 6, 0);
             addWall(P.d + T * 2, T, P.x0 - T / 2 - 6, P.cz, Math.PI / 2);
             addWall(P.d + T * 2, T, P.x1 + T / 2 + 6, P.cz, Math.PI / 2);
+        }
+
+        // ================= KHÁN ĐÀI + KHÁN GIẢ =================
+        buildStands() {
+            const P = this.pitch;
+            const ROWS = 3;
+            const ROW_H = 11;
+            const ROW_D = 15;
+            const gap = 44;              // khoảng cách từ đường biên tới hàng ghế đầu
+            const BASE_Y = 24;           // hàng ghế đầu cao hơn tường bao để khán giả nhìn thấy
+
+            const seatMat = new THREE.MeshStandardMaterial({ color: 0x242a38, roughness: 0.85 });
+            const stepMat = new THREE.MeshStandardMaterial({ color: 0x1b2130, roughness: 0.9 });
+            const roofMat = new THREE.MeshStandardMaterial({
+                color: 0x2c3448, roughness: 0.7, metalness: 0.25,
+                transparent: true, opacity: 0.85, side: THREE.DoubleSide
+            });
+
+            // Mô tả 4 khán đài: hướng, chiều dài, vị trí hàng đầu, hướng lùi
+            const sides = [
+                { // Bắc (z âm)
+                    len: P.w + 150, rowStart: P.z0 - gap, dirZ: -1,
+                    center: { x: P.cx, z: 0 }, axis: 'x'
+                },
+                { // Nam (z dương)
+                    len: P.w + 150, rowStart: P.z1 + gap, dirZ: 1,
+                    center: { x: P.cx, z: 0 }, axis: 'x'
+                },
+                { // Tây (x âm)
+                    len: P.d + 120, rowStart: P.x0 - gap, dirZ: 0, dirX: -1,
+                    center: { x: 0, z: P.cz }, axis: 'z'
+                },
+                { // Đông (x dương)
+                    len: P.d + 120, rowStart: P.x1 + gap, dirZ: 0, dirX: 1,
+                    center: { x: 0, z: P.cz }, axis: 'z'
+                }
+            ];
+
+            const crowdPos = [];
+            for (const sd of sides) {
+                const isX = sd.axis === 'x';
+                for (let r = 0; r < ROWS; r++) {
+                    const y = BASE_Y + r * ROW_H;
+                    const off = r * ROW_D;
+                    const z = isX ? sd.rowStart + sd.dirZ * off : 0;
+                    const x = isX ? 0 : sd.rowStart + sd.dirX * off;
+
+                    // bậc ghế
+                    const slabW = isX ? sd.len : ROW_D + 4;
+                    const slabD = isX ? ROW_D + 4 : sd.len;
+                    const slab = new THREE.Mesh(new THREE.BoxGeometry(slabW, 7, slabD), r === 0 ? seatMat : stepMat);
+                    slab.position.set(isX ? sd.center.x : x, y, isX ? z : sd.center.z);
+                    slab.receiveShadow = true;
+                    slab.castShadow = false;
+                    slab.userData.kind = 'stand';
+                    this.scene.add(slab);
+
+                    // vị trí khán giả trên bậc này
+                    const step = 14;
+                    const n = Math.floor(sd.len / step);
+                    for (let i = 0; i < n; i++) {
+                        const t = (i + 0.5) / n - 0.5;
+                        const jitter = (Math.random() - 0.5) * 4;
+                        const px = isX ? sd.center.x + t * sd.len : x + jitter;
+                        const pz = isX ? z + jitter : sd.center.z + t * sd.len;
+                        crowdPos.push({ x: px, y: y + 6.5, z: pz, phase: Math.random() * Math.PI * 2 });
+                    }
+                }
+
+                // tường hậu + mái che
+                const backOff = ROWS * ROW_D;
+                const backH = BASE_Y + ROWS * ROW_H + 34;
+                const bx = isX ? sd.center.x : sd.rowStart + sd.dirX * (backOff + 6);
+                const bz = isX ? sd.rowStart + sd.dirZ * (backOff + 6) : sd.center.z;
+                const bw = isX ? sd.len + 20 : 8;
+                const bd = isX ? 8 : sd.len + 20;
+                const back = new THREE.Mesh(new THREE.BoxGeometry(bw, backH, bd), stepMat);
+                back.position.set(bx, backH / 2, bz);
+                back.userData.kind = 'stand';
+                this.scene.add(back);
+
+                // mái che nghiêng phía trên khán đài
+                const roofW = isX ? sd.len + 60 : 62;
+                const roofD = isX ? 62 : sd.len + 60;
+                const roof = new THREE.Mesh(new THREE.BoxGeometry(roofW, 3, roofD), roofMat);
+                roof.position.set(
+                    isX ? sd.center.x : sd.rowStart + sd.dirX * (backOff * 0.45),
+                    BASE_Y + ROWS * ROW_H + 40,
+                    isX ? sd.rowStart + sd.dirZ * (backOff * 0.45) : sd.center.z
+                );
+                roof.userData.kind = 'stand';
+                this.scene.add(roof);
+            }
+
+            // ===== Khán giả: 2 InstancedMesh (thân + đầu) =====
+            const COUNT = crowdPos.length;
+            const bodyGeo = new THREE.BoxGeometry(4.2, 8.5, 3.2);
+            const headGeo = new THREE.SphereGeometry(2.5, 6, 5);
+            headGeo.translate(0, 6.2, 0);          // đặt đầu lên trên thân
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+            const headMat = new THREE.MeshLambertMaterial({ color: 0xf3c9a2 });
+
+            this.crowdBody = new THREE.InstancedMesh(bodyGeo, bodyMat, COUNT);
+            this.crowdHead = new THREE.InstancedMesh(headGeo, headMat, COUNT);
+            this.crowdBody.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            this.crowdHead.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            this.crowdBody.userData.kind = 'crowd';
+            this.crowdHead.userData.kind = 'crowd';
+            this.crowdBody.frustumCulled = false;
+            this.crowdHead.frustumCulled = false;
+
+            const palette = ['#e94560', '#4ecdc4', '#ffd166', '#a06cd5', '#06d6a0', '#ffffff', '#ff8b3d', '#3d7bff'];
+            const dummy = new THREE.Object3D();
+            const col = new THREE.Color();
+            this.crowdData = crowdPos;
+            for (let i = 0; i < COUNT; i++) {
+                const c = crowdPos[i];
+                dummy.position.set(c.x, c.y, c.z);
+                dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+                dummy.scale.setScalar(0.85 + Math.random() * 0.35);
+                dummy.updateMatrix();
+                this.crowdBody.setMatrixAt(i, dummy.matrix);
+                this.crowdHead.setMatrixAt(i, dummy.matrix);
+                this.crowdBody.setColorAt(i, col.set(palette[Math.floor(Math.random() * palette.length)]));
+                // màu da ngẫu nhiên
+                const skin = ['#f3c9a2', '#e6b183', '#d29a68', '#b87d4f', '#96603c'];
+                this.crowdHead.setColorAt(i, col.set(skin[Math.floor(Math.random() * skin.length)]));
+            }
+            this.crowdBody.instanceMatrix.needsUpdate = true;
+            this.crowdHead.instanceMatrix.needsUpdate = true;
+            if (this.crowdBody.instanceColor) this.crowdBody.instanceColor.needsUpdate = true;
+            if (this.crowdHead.instanceColor) this.crowdHead.instanceColor.needsUpdate = true;
+            this.scene.add(this.crowdBody);
+            this.scene.add(this.crowdHead);
+
+            this._crowdDummy = dummy;
+            this.crowdJumpTimer = 0;
+
+        }
+
+        // Cập nhật khán giả: nhấp nhô / nhảy khi reo hò
+        updateCrowd(dt) {
+            if (!this.crowdBody || !this.crowdData) return;
+            this._crowdAcc += dt;
+            const hz = this.quality === 'low' ? 10 : 30;   // máy yếu cập nhật thưa hơn
+            if (this._crowdAcc < 1 / hz) return;
+            const step = this._crowdAcc;
+            this._crowdAcc = 0;
+
+            this.crowdJumpTimer = Math.max(0, (this.crowdJumpTimer || 0) - step);
+            const excite = Math.max(0, Math.min(1, this.game.crowdIntensity || 0.3));
+            const cheer = this.crowdJumpTimer > 0 ? 1 : 0;
+            const amp = 1.2 + excite * 3.2 + cheer * 4.5;
+            const dummy = this._crowdDummy;
+            const t = this.time;
+            const n = this.crowdData.length;
+            for (let i = 0; i < n; i++) {
+                const c = this.crowdData[i];
+                const bob = Math.sin(t * (5 + excite * 3) + c.phase) * amp;
+                const jump = cheer ? Math.abs(Math.sin(t * 9 + c.phase)) * 6 * cheer : 0;
+                dummy.position.set(c.x, c.y + bob * 0.5 + jump, c.z);
+                dummy.rotation.set(0, c.phase, bob * 0.02);
+                dummy.scale.setScalar(0.85 + (i % 5) * 0.05);
+                dummy.updateMatrix();
+                this.crowdBody.setMatrixAt(i, dummy.matrix);
+                this.crowdHead.setMatrixAt(i, dummy.matrix);
+            }
+            this.crowdBody.instanceMatrix.needsUpdate = true;
+            this.crowdHead.instanceMatrix.needsUpdate = true;
+        }
+
+        // Khán đài bùng nổ (ghi bàn / hết trận)
+        crowdJump(power) {
+            this.crowdJumpTimer = Math.max(this.crowdJumpTimer || 0, 1.2 + (power || 1) * 0.8);
         }
 
         buildGoals() {
@@ -610,6 +787,28 @@
             }
         }
 
+        // ================= TRỌNG TÀI =================
+        syncReferee(dt) {
+            const ref = this.game.referee;
+            if (!ref) return;
+            if (!this.refereeModel) {
+                if (!window.PlayerModel) return;
+                this.refereeModel = new window.PlayerModel(ref, { game: this.game });
+                this.scene.add(this.refereeModel.group);
+            }
+            const m = this.refereeModel;
+            const dx = ref.pos.x - m.prevX;
+            const dy = ref.pos.y - m.prevY;
+            const step = Math.hypot(dx, dy);
+            m.speed = dt > 0 ? step / dt : 0;
+            if (step > 0.08) m.dirAngle = Math.atan2(dy, dx);
+            m.prevX = ref.pos.x;
+            m.prevY = ref.pos.y;
+            m.group.position.set(ref.pos.x, 0, ref.pos.y);
+            m.group.visible = ref.active !== false;
+            m.update(dt);
+        }
+
         // ================= BALL =================
         syncBall(dt) {
             const b = this.game.ball;
@@ -633,13 +832,15 @@
         }
 
         setCameraMode(mode) {
-            const m = (mode === 'wide') ? 'wide' : 'third';
+            const m = (mode === 'wide' || mode === 'tv') ? mode : 'third';
             if (m === this.cameraMode) return;
             this.cameraMode = m;
         }
 
         toggleCamera() {
-            this.setCameraMode(this.cameraMode === 'third' ? 'wide' : 'third');
+            const order = ['third', 'wide', 'tv'];
+            const i = order.indexOf(this.cameraMode);
+            this.setCameraMode(order[(i + 1) % order.length]);
             return this.cameraMode;
         }
 
@@ -672,6 +873,35 @@
                 desiredPos.set(P.cx + Math.cos(a) * 760, 300 + Math.sin(this.time * 0.13) * 40, P.cz + Math.sin(a) * 700);
                 desiredLook.set(P.cx, 6, P.cz);
                 lambdaPos = 1.6; lambdaLook = 1.6;
+            } else if (g.state === 'pre_match' || g.state === 'post_match') {
+                // ---- Cận cảnh vòng tròn giữa sân: trọng tài thổi còi ----
+                const ref = g.referee;
+                const fx = ref ? ref.pos.x : P.cx;
+                const fz = ref ? ref.pos.y : P.cz;
+                const a = Math.sin(this.time * 0.35) * 0.5;
+                desiredPos.set(fx - 120 + Math.cos(a) * 40, 62, fz + 175);
+                desiredLook.set(fx, 16, fz);
+                lambdaPos = 2.6; lambdaLook = 3.0;
+                cam.fov = 46;
+            } else if (this.cameraMode === 'tv') {
+                // ---- GÓC NHÌN FIFA 99: camera cao từ khán đài bên sân, bám bóng ----
+                const b = g.ball.pos;
+                const cp2 = g.currentControlledPlayer;
+                const px2 = cp2 ? cp2.pos.x : P.cx;
+                const followX = P.cx + ((b.x * 0.7 + px2 * 0.3) - P.cx) * 0.55;
+                const followZ = P.cz + (b.y - P.cz) * 0.22;
+                desiredPos.set(
+                    clamp(followX, P.x0 + 60, P.x1 - 60),
+                    250,
+                    P.z0 - 330
+                );
+                desiredLook.set(
+                    clamp(followX, P.x0 + 40, P.x1 - 40),
+                    6,
+                    clamp(followZ, P.z0 - 20, P.z1 + 20)
+                );
+                lambdaPos = 3.0; lambdaLook = 3.4;
+                cam.fov = 44;
             } else if (g.state === 'goal_celebration') {
                 // ---- Cận cảnh ăn mừng ----
                 const scorer = g.lastScorer && g.lastScorer.pos ? g.lastScorer : null;
@@ -788,7 +1018,9 @@
             }
 
             this.syncPlayers(safeDt, safeDt);
+            this.syncReferee(safeDt);
             this.syncBall(safeDt);
+            this.updateCrowd(safeDt);
 
             // Vòng chọn + mũi tên
             const cp = this.game.currentControlledPlayer;

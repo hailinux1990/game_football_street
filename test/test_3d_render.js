@@ -64,7 +64,11 @@ function check(name, ok, detail) {
         args: [
             '--no-sandbox', '--disable-dev-shm-usage',
             '--enable-unsafe-swiftshader',
-            '--use-gl=angle', '--use-angle=gl-egl'
+            '--use-gl=angle', '--use-angle=gl-egl',
+            // tránh Chrome hạ tần số requestAnimationFrame khi chạy headless
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding'
         ]
     });
     const page = await browser.newPage();
@@ -75,7 +79,25 @@ function check(name, ok, detail) {
     page.on('pageerror', e => errors.push('pageerror: ' + e.message));
 
     await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForFunction('window.game && window.game.renderer3d', { timeout: 30000 });
+    try {
+        await page.waitForFunction('window.game && window.game.renderer3d', { timeout: 30000 });
+    } catch (e) {
+        const gl = await page.evaluate(() => {
+            const c = document.createElement('canvas');
+            return !!(c.getContext('webgl2') || c.getContext('webgl'));
+        }).catch(() => 'unknown');
+        console.error('\n❌ Game không khởi tạo được chế độ 3D (WebGL).');
+        console.error('   Kiểm tra WebGL trong Chrome headless:', gl);
+        if (gl === false) {
+            console.error('   → Máy/môi trường hiện không cấp được WebGL context (thường do hết RAM khi dùng');
+            console.error('     llvmpipe/swiftshader). Game vẫn chạy bình thường ở chế độ 2D dự phòng.');
+            console.error('   → Có thể kiểm tra phần cảnh 3D (khán đài, khán giả, trọng tài, camera) bằng:');
+            console.error('     node test/test_3d_crowd_referee.js  (stub WebGLRenderer, không cần GPU)');
+        }
+        console.error('   Console errors:\n   ' + errors.slice(0, 4).join('\n   '));
+        await browser.close();
+        process.exit(1);
+    }
     await new Promise(r => setTimeout(r, 800));
 
     // ---------- 1. Khởi tạo 3D ----------
@@ -215,11 +237,14 @@ function check(name, ok, detail) {
         g.input.keysPressed = { KeyC: true };
         g.handleHumanInput(0.016);
         const after2 = g.cameraMode;
-        return { before, after1, after2, rendererMode: g.renderer3d.cameraMode };
+        g.input.keysPressed = { KeyC: true };
+        g.handleHumanInput(0.016);
+        const after3 = g.cameraMode;
+        return { before, after1, after2, after3, rendererMode: g.renderer3d.cameraMode };
     });
-    check('Phím C đổi góc nhìn (third → wide → third)',
-        toggle.before === 'third' && toggle.after1 === 'wide' && toggle.after2 === 'third',
-        toggle.before + ' → ' + toggle.after1 + ' → ' + toggle.after2);
+    check('Phím C đổi góc nhìn (third → wide → FIFA 99 → third)',
+        toggle.before === 'third' && toggle.after1 === 'wide' && toggle.after2 === 'tv' && toggle.after3 === 'third',
+        toggle.before + ' → ' + toggle.after1 + ' → ' + toggle.after2 + ' → ' + toggle.after3);
 
     // ---------- 7. Animation: chân tay chuyển động ----------
     const anim = await page.evaluate(() => {
@@ -301,7 +326,7 @@ function check(name, ok, detail) {
         // quay lại luồng game bình thường
     });
     await page.evaluate(() => { document.getElementById('btn-play').click(); });
-    await new Promise(r => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 4200));   // gồm cả nghi thức trọng tài thổi còi
 
     const live = await page.evaluate(() => {
         const g = window.game;
@@ -316,7 +341,7 @@ function check(name, ok, detail) {
     });
     check('Game chạy realtime sau khi bấm CHƠI NGAY', live.state === 'playing' && live.timer < 300,
         'state=' + live.state + ' fps=' + live.fps + ' calls=' + live.drawCalls);
-    check('Badge góc nhìn hiển thị đúng', /NGƯỜI THỨ BA|TOÀN CẢNH/.test(live.badge || ''), live.badge);
+    check('Badge góc nhìn hiển thị đúng', /NGƯỜI THỨ BA|TOÀN CẢNH|FIFA 99/.test(live.badge || ''), live.badge);
 
     // Screenshots
     if (!fs.existsSync(SHOT_DIR)) fs.mkdirSync(SHOT_DIR, { recursive: true });

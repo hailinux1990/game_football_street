@@ -24,6 +24,11 @@
         blue: {
             shirt: 0x2fb3c9, shirtDark: 0x136b7c, shirtLight: 0x8ff0ff,
             shorts: 0xf2f2f4, socks: 0x2392a6, trim: 0xd8fbff, accent: 0xffffff
+        },
+        // Trọng tài: áo đen, viền vàng
+        ref: {
+            shirt: 0x15181f, shirtDark: 0x0b0d12, shirtLight: 0x2c313c,
+            shorts: 0x15181f, socks: 0x15181f, trim: 0xffd24a, accent: 0xffd24a
         }
     };
 
@@ -71,7 +76,7 @@
         constructor(player, opts) {
             this.player = player;
             this.opts = opts || {};
-            this.team = player.team === 'blue' ? 'blue' : 'red';
+            this.team = KIT[player.team] ? player.team : 'red';
 
             this.group = new THREE.Group();
             this.group.position.set(player.pos.x, 0, player.pos.y);

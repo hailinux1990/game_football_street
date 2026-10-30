@@ -37,7 +37,7 @@ với **cầu thủ có đầy đủ chân tay** (mô hình humanoid phân khúc
 | **E** | Kỹ năng đặc biệt (dash nhanh, tốn 25 thể lực) |
 | **Shift** | Chạy nhanh (tốn thể lực) |
 | **Q** | Chuyển cầu thủ điều khiển |
-| **C** | **Đổi góc nhìn: Người thứ ba ↔ Toàn cảnh sân** |
+| **C** | **Đổi góc nhìn: Người thứ ba → Toàn cảnh sân → FIFA 99 (góc cao bám bóng)** |
 | **Chuột** | Kéo để xoay camera, lăn để zoom (góc nhìn người thứ ba) |
 | **ESC** | Tạm dừng |
 
@@ -47,7 +47,7 @@ với **cầu thủ có đầy đủ chân tay** (mô hình humanoid phân khúc
 
 Trong **Cài đặt**:
 
-- **🎥 Góc nhìn**: `Người thứ ba (sau lưng cầu thủ)` hoặc `Toàn cảnh sân bóng`
+- **🎥 Góc nhìn**: `Người thứ ba (sau lưng cầu thủ)` · `Toàn cảnh sân bóng` · `📺 FIFA 99 (góc cao bám bóng)`
 - **🖥️ Chất lượng 3D**: `Cao (đổ bóng)` hoặc `Thấp (máy yếu)`
 
 Có thể ép chế độ bằng URL:
@@ -60,7 +60,20 @@ Có thể ép chế độ bằng URL:
 
 Nếu trình duyệt không hỗ trợ WebGL, game tự động quay về chế độ 2D cũ (không bị lỗi trắng màn hình).
 
-## Gameplay
+## Diễn biến trận đấu
+
+- **Nghi thức vào trận**: NPC **trọng tài** (áo đen, viền vàng) dắt đội ra sân, tiến vào vòng tròn giữa sân,
+  **thổi còi bắt đầu** (2 tiếng còi rít thật) → bóng vào cuộc. Hết giờ, trọng tài chạy về giữa sân
+  **thổi còi kết thúc** (2 ngắn + 1 dài) rồi mới hiện bảng kết quả.
+- **Khán đài có khán giả reo hò**: 4 khán đài nhiều tầng quanh sân với hàng trăm khán giả 3D (mỗi người
+  một màu áo riêng), **nhấp nhô liên tục**, càng gay cấn (bóng gần khung thành) càng ồn và nhảy mạnh;
+  ghi bàn/hết trận thì cả khán đài **bùng nổ**. Âm thanh khán đài là tiếng ồn nền tổng hợp (WebAudio),
+  tự to nhỏ theo diễn biến — tắt bằng checkbox "Âm thanh".
+- **Kết thúc trận**: hiện bảng kết quả (tỉ số, đội thắng) và **tự động trở về MENU CHÍNH sau 8 giây**
+  (vẫn có nút TRẬN MỚI / MENU CHÍNH để đi ngay).
+- **Banner kiểu FIFA 99**: `⚽ TRẬN ĐẤU SẮP BẮT ĐẦU` → `🔔 TRỌNG TÀI THỔI CÒI — BẮT ĐẦU!` → `GOAL!!! #9 · 3'`.
+
+## Gameplay (NPC kiểu FIFA 99)
 
 - **6 cầu thủ trên sân**: 3 đội Đỏ vs 3 đội Xanh (1 thủ môn, 1 hậu vệ, 1 tiền đạo mỗi đội)
 - **NPC thông minh**:
@@ -69,7 +82,10 @@ Nếu trình duyệt không hỗ trợ WebGL, game tự động quay về chế 
   - **Tự động chuyển quyền điều khiển** (mũi tên vàng) sang cầu thủ gần bóng nhất ngay khi bị đối phương
     cướp bóng — không cần bấm `Q`
   - **Nút chuyền ngắn = nút tranh bóng**: khi không có bóng, bấm `Space` (hoặc `✕`) để lao vào áp sát/xoạc bóng
-  - AI chuyền bóng thông minh: ưu tiên đồng đội phía trước, thoáng, đang chạy chỗ
+  - AI chuyền bóng thông minh kiểu FIFA 99: chấm điểm từng phương án (độ thoáng của người nhận,
+    có bị chặn đường chuyền không, đang ở phía trước không), **ra quyết định mỗi ~0.15s** nên bóng
+    luân chuyển liên tục; bị bí ở sân nhà thì phá bóng dài, bị chặn hẳn thì chuyền bổng
+  - Tiền đạo **lao vào vòng cấm** khi đồng đội dẫn bóng tới gần khung thành, tiền vệ dâng theo tấn công
 - **Thủ môn** bắt góc, bay người theo hướng bóng
 - **Sân đường phố**: tường bao quanh, bóng nảy tường
 
