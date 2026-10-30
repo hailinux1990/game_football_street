@@ -14,6 +14,75 @@ function pointToSegmentDist(p, a, b) {
     return Math.hypot(p.x - cx, p.y - cy);
 }
 
+// ============================================================
+// PlayerControl: nguồn điều khiển của MỘT người chơi
+// - P1: bàn phím hoặc tay cầm chính (theo "Chế độ điều khiển" trong Cài đặt)
+// - P2: tay cầm thứ hai (PS5) khi bật chế độ 2 người chơi
+// ============================================================
+class PlayerControl {
+    constructor(game, opts) {
+        opts = opts || {};
+        this.game = game;
+        this.label = opts.label || 'P1';
+        // padSlot: 'second' = dùng tay cầm thứ 2 (tự nhận khi cắm/rút)
+        //          null     = dùng bàn phím hoặc tay cầm chính (theo Chế độ điều khiển)
+        this.padSlot = opts.padSlot || null;
+        this.team = opts.team || 'red';
+        this.color = opts.color || '#ffd24a';
+        this.player = null;
+        this.enabled = opts.enabled !== false;
+    }
+
+    // Chỉ số tay cầm đang dùng (null = không dùng tay cầm riêng)
+    getPadIndex() {
+        if (this.padSlot === 'second') {
+            const idx = this.game.input.secondPadIndex();
+            return idx >= 0 ? idx : null;
+        }
+        return null;
+    }
+
+    isPad() {
+        return this.getPadIndex() !== null;
+    }
+
+    // Có nguồn điều khiển sẵn sàng không?
+    padReady() {
+        if (this.padSlot === 'second') return this.getPadIndex() !== null;
+        return true;
+    }
+
+    isDown(action) {
+        const inp = this.game.input;
+        const pad = this.getPadIndex();
+        if (pad !== null) return inp.isActionGpDownFor(pad, action);
+        return inp.isActionDown(action);
+    }
+
+    isPressed(action) {
+        const inp = this.game.input;
+        const pad = this.getPadIndex();
+        if (pad !== null) return inp.isActionGpPressedFor(pad, action);
+        return inp.isActionPressed(action);
+    }
+
+    move() {
+        const inp = this.game.input;
+        const pad = this.getPadIndex();
+        if (pad !== null) return inp.getGamepadMoveFor(pad);
+        const gpReady = inp.gpConnected && inp.gamepadEnabled;
+        if (inp.controlMode === 'gamepad' && gpReady) {
+            return inp.getGamepadMove();
+        }
+        let x = 0, y = 0;
+        if (inp.isActionDown('moveLeft') || inp.isDown('ArrowLeft')) x -= 1;
+        if (inp.isActionDown('moveRight') || inp.isDown('ArrowRight')) x += 1;
+        if (inp.isActionDown('moveUp') || inp.isDown('ArrowUp')) y -= 1;
+        if (inp.isActionDown('moveDown') || inp.isDown('ArrowDown')) y += 1;
+        return { x, y };
+    }
+}
+
 class Game {
     constructor(canvas) {
         this.canvas = canvas;
@@ -61,6 +130,15 @@ class Game {
         this.goalCelebrationTimer = 0;
         this.difficulty = 'normal';
 
+        // ===== Chế độ chơi: 1 người / 2 người =====
+        // '1p'      : 1 người chơi (điều khiển đội Đỏ)
+        // '2p_vs'   : 2 người đối kháng (P1 đội Đỏ, P2 đội Xanh)
+        // '2p_coop' : 2 người đồng đội (cùng đội Đỏ)
+        this.playMode = '1p';
+        this.controls = [];
+        this.player2 = null;
+        this.loadPlayMode();
+
         // ===== Trọng tài & diễn biến trận =====
         this.referee = null;              // NPC trọng tài (không tính vào đội hình)
         this.preMatchTimer = 0;           // đồng hồ đếm của màn dắt đội ra sân
@@ -91,6 +169,138 @@ class Game {
     }
 
     // ===== Chế độ camera (lưu localStorage) =====
+    // ===== Chế độ chơi (1 người / 2 người) =====
+    loadPlayMode() {
+        try {
+            const v = localStorage.getItem('sf_play_mode');
+            if (v === '1p' || v === '2p_vs' || v === '2p_coop') this.playMode = v;
+        } catch (e) { /* ignore */ }
+    }
+
+    savePlayMode() {
+        try { localStorage.setItem('sf_play_mode', this.playMode); } catch (e) { /* ignore */ }
+    }
+
+    isTwoPlayer() {
+        return this.playMode === '2p_vs' || this.playMode === '2p_coop';
+    }
+
+    setPlayMode(mode) {
+        this.playMode = (mode === '2p_vs' || mode === '2p_coop') ? mode : '1p';
+        this.savePlayMode();
+        if (this.players && this.players.length) {
+            this.setupControls();
+            this.resetPositions();
+        }
+        if (typeof this.onPlayModeChange === 'function') this.onPlayModeChange(this.playMode);
+        return this.playMode;
+    }
+
+    // Danh sách cầu thủ đang do NGƯỜI chơi điều khiển
+    humanPlayers() {
+        const list = [];
+        for (const c of this.controls) {
+            if (!c.padReady()) continue;                 // P2 chưa có tay cầm -> AI điều khiển
+            if (c.player && c.player.active && list.indexOf(c.player) === -1) list.push(c.player);
+        }
+        return list;
+    }
+
+    // Cập nhật cờ điều khiển mỗi frame (khi cắm/rút tay cầm giữa trận)
+    refreshControlFlags() {
+        for (const c of this.controls) {
+            if (!c.player) continue;
+            const ready = c.padReady();
+            const human = this.humanPlayers().indexOf(c.player) !== -1;
+            if (ready && c.player.aiControlled) c.player.aiControlled = false;
+            if (!ready && !c.player.aiControlled) c.player.aiControlled = true;
+            c.player.isControlled = human;
+        }
+    }
+
+    isHumanControlled(p) {
+        return this.humanPlayers().indexOf(p) !== -1;
+    }
+
+    controlOf(p) {
+        for (const c of this.controls) if (c.player === p) return c;
+        return null;
+    }
+
+    // Dựng nguồn điều khiển theo chế độ chơi hiện tại
+    setupControls() {
+        const input = this.input;
+        const red = this.teamPlayers.red;
+        const blue = this.teamPlayers.blue;
+        const prev = this.controls || [];
+        this.controls = [];
+
+        // Reset cờ điều khiển của mọi cầu thủ
+        for (const p of this.players) {
+            p.isControlled = false;
+            p.aiControlled = true;
+        }
+
+        // ---- Người chơi 1: bàn phím hoặc tay cầm chính ----
+        const c1 = new PlayerControl(this, { label: 'P1', team: 'red', color: '#ffd24a' });
+        c1.player = red[2];                       // tiền đạo đội Đỏ
+        if (prev[0] && prev[0].player && prev[0].player.team === 'red' && this.players.indexOf(prev[0].player) !== -1) {
+            c1.player = prev[0].player;
+        }
+        this.controls.push(c1);
+
+        // ---- Người chơi 2: tay cầm thứ hai ----
+        if (this.isTwoPlayer()) {
+            const c2 = new PlayerControl(this, {
+                label: 'P2',
+                padSlot: 'second',                     // luôn dùng tay cầm thứ 2
+                team: this.playMode === '2p_vs' ? 'blue' : 'red',
+                color: '#5ad1ff'
+            });
+            if (this.playMode === '2p_vs') {
+                c2.player = blue[2];              // tiền đạo đội Xanh
+                if (prev[1] && prev[1].player && prev[1].player.team === 'blue' && this.players.indexOf(prev[1].player) !== -1) {
+                    c2.player = prev[1].player;
+                }
+            } else {
+                c2.player = red[1];               // hậu vệ đội Đỏ (chơi đồng đội)
+                if (prev[1] && prev[1].player && prev[1].player.team === 'red' && this.players.indexOf(prev[1].player) !== -1) {
+                    c2.player = prev[1].player;
+                }
+            }
+            // tránh 2 người điều khiển cùng 1 cầu thủ
+            if (c2.player && c2.player === c1.player) {
+                const alt = this.teamPlayers[c2.team].filter(p => p.role !== Role.GK && p !== c1.player);
+                if (alt.length) c2.player = alt[0];
+            }
+            this.controls.push(c2);
+            this.player2 = c2.player;
+        } else {
+            this.player2 = null;
+        }
+
+        // Áp cờ điều khiển (P2 chưa cắm tay cầm thì cầu thủ đó do AI điều khiển)
+        for (const c of this.controls) {
+            if (!c.player) continue;
+            const ready = c.padReady();
+            c.player.aiControlled = !ready;
+            c.player.isControlled = ready;
+        }
+
+        this.currentControlledPlayer = c1.player;
+        this._autoSwitchCd = 0;
+        this._possessSwitchCd = 0;
+        return this.controls;
+    }
+
+    // Tay cầm của P2 đã sẵn sàng chưa
+    isPlayer2Ready() {
+        if (!this.isTwoPlayer()) return false;
+        const c2 = this.controls[1];
+        if (!c2) return false;
+        return c2.padReady();
+    }
+
     loadCameraMode() {
         try {
             const v = localStorage.getItem('sf_camera_mode');
@@ -152,6 +362,9 @@ class Game {
 
         // ===== Trọng tài (NPC, không thuộc đội nào) =====
         if (!this.referee) this.referee = createReferee(f.x + f.width / 2, f.y + f.height + 40);
+
+        // ===== Người chơi (1 hoặc 2 người) =====
+        this.setupControls();
     }
 
     setupUI() {
@@ -454,7 +667,10 @@ class Game {
             return;
         }
 
-        // --- Handle input for controlled player ---
+        // --- Cập nhật nguồn điều khiển (P1/P2, cắm/rút tay cầm) ---
+        this.refreshControlFlags();
+
+        // --- Handle input for controlled players (P1 & P2) ---
         this.handleHumanInput(dt);
 
         // --- Update AI ---
@@ -560,26 +776,43 @@ class Game {
         ref.update(dt);
     }
 
+    // Nhận input cho TẤT CẢ người chơi (1 hoặc 2 người)
     handleHumanInput(dt) {
-        const p = this.currentControlledPlayer;
-        if (!p) return;
-
-        let dx = 0, dy = 0;
-        const mode = this.input.controlMode;
-        const gpReady = this.input.gpConnected && this.input.gamepadEnabled;
-
-        if (mode === 'gamepad' && gpReady) {
-            // Chế độ tay cầm PS5: cần trái / D-pad analog
-            const gpMove = this.input.getGamepadMove();
-            dx = gpMove.x;
-            dy = gpMove.y;
-        } else {
-            // Chế độ bàn phím (hoặc fallback khi tay cầm chưa kết nối)
-            if (this.input.isActionDown('moveLeft') || this.input.isDown('ArrowLeft')) dx -= 1;
-            if (this.input.isActionDown('moveRight') || this.input.isDown('ArrowRight')) dx += 1;
-            if (this.input.isActionDown('moveUp') || this.input.isDown('ArrowUp')) dy -= 1;
-            if (this.input.isActionDown('moveDown') || this.input.isDown('ArrowDown')) dy += 1;
+        const list = (this.controls && this.controls.length) ? this.controls : null;
+        if (!list) {
+            // fallback an toàn nếu chưa có controls
+            if (this.currentControlledPlayer) {
+                this.handleControlInput(dt, { player: this.currentControlledPlayer, isDown: a => this.input.isActionDown(a),
+                    isPressed: a => this.input.isActionPressed(a), move: () => this._legacyMove(), label: 'P1' });
+            }
+            return;
         }
+        for (const ctl of list) {
+            if (!ctl || !ctl.player || !ctl.player.active) continue;
+            if (!ctl.padReady()) continue;               // P2 chưa có tay cầm -> AI đá
+            this.handleControlInput(dt, ctl);
+        }
+    }
+
+    // Input cũ (bàn phím/tay cầm chính) - dùng khi chưa có controls
+    _legacyMove() {
+        const inp = this.input;
+        if (inp.controlMode === 'gamepad' && inp.gpConnected && inp.gamepadEnabled) return inp.getGamepadMove();
+        let x = 0, y = 0;
+        if (inp.isActionDown('moveLeft') || inp.isDown('ArrowLeft')) x -= 1;
+        if (inp.isActionDown('moveRight') || inp.isDown('ArrowRight')) x += 1;
+        if (inp.isActionDown('moveUp') || inp.isDown('ArrowUp')) y -= 1;
+        if (inp.isActionDown('moveDown') || inp.isDown('ArrowDown')) y += 1;
+        return { x, y };
+    }
+
+    // Xử lý input cho 1 người chơi (ctl: PlayerControl)
+    handleControlInput(dt, ctl) {
+        const p = ctl.player;
+        if (!p || !p.active) return;
+
+        const mv = ctl.move ? ctl.move() : { x: 0, y: 0 };
+        let dx = mv.x || 0, dy = mv.y || 0;
 
         if (dx !== 0 || dy !== 0) {
             const len = Math.hypot(dx, dy);
@@ -596,7 +829,7 @@ class Game {
                 dx = wx; dy = wy;
             }
 
-            const sprint = this.input.isActionDown('sprint') && p.stamina > 10;
+            const sprint = ctl.isDown('sprint') && p.stamina > 10;
             const speed = p.maxSpeed * (sprint ? 1.5 : 1);
 
             p.pos.x += dx * speed * dt * 60;
@@ -626,37 +859,38 @@ class Game {
             this.ball.vel = new Vector2(0, 0);
         }
 
-        // --- Actions (theo key binding) ---
+        // --- Actions (theo key binding của từng người chơi) ---
         // Nút chuyền ngắn: CÓ bóng → chuyền bóng | KHÔNG có bóng → tranh bóng (áp sát, xoạc bóng)
-        if (this.input.isActionPressed('pass')) {
-            if (p.hasBall) this.tryPass();
-            else this.tryTackle();
+        if (ctl.isPressed('pass')) {
+            if (p.hasBall) this.tryPass(p);
+            else this.tryTackle(p);
         }
         // Chọc khe: đường chuyền sệt vào khoảng trống phía trước đồng đội đang chạy
-        if (this.input.isActionPressed('throughPass')) {
-            if (p.hasBall) this.tryThroughPass();
-            else this.tryTackle();
+        if (ctl.isPressed('throughPass')) {
+            if (p.hasBall) this.tryThroughPass(p);
+            else this.tryTackle(p);
         }
         // Chuyền bóng bổng: bóng bay cao qua đầu đối phương
-        if (this.input.isActionPressed('loftPass')) {
-            if (p.hasBall) this.tryLoftPass();
+        if (ctl.isPressed('loftPass')) {
+            if (p.hasBall) this.tryLoftPass(p);
         }
-        if (this.input.isActionPressed('shoot')) {
-            this.tryShoot();
+        if (ctl.isPressed('shoot')) {
+            this.tryShoot(p);
         }
-        if (this.input.isActionPressed('skill')) {
-            this.trySkill();
+        if (ctl.isPressed('skill')) {
+            this.trySkill(p);
         }
-        if (this.input.isActionPressed('switchPlayer')) {
-            this.switchPlayer();
+        if (ctl.isPressed('switchPlayer')) {
+            this.switchPlayer(ctl);
         }
-        if (this.input.isActionPressed('toggleCamera')) {
+        // Đổi góc nhìn chỉ dành cho người chơi 1 (dùng chung camera)
+        if (!ctl.isPad() && ctl.isPressed('toggleCamera')) {
             this.toggleCameraMode();
         }
     }
 
-    tryPass() {
-        const p = this.currentControlledPlayer;
+    tryPass(who) {
+        const p = who || this.currentControlledPlayer;
         if (!p || !p.hasBall) return;
         const mates = p.teamMates.filter(m => m.active);
         if (mates.length === 0) return;
@@ -698,8 +932,8 @@ class Game {
     }
 
     // ===== CHỌC KHE: đường chuyền sệt vào khoảng trống phía trước đồng đội =====
-    tryThroughPass() {
-        const p = this.currentControlledPlayer;
+    tryThroughPass(who) {
+        const p = who || this.currentControlledPlayer;
         if (!p || !p.hasBall) return;
         const mates = p.teamMates.filter(m => m.active && m.role !== Role.GK);
         if (mates.length === 0) { this.tryPass(); return; }
@@ -746,8 +980,8 @@ class Game {
     }
 
     // ===== CHUYỀN BÓNG BỔNG: bóng bay cao qua đầu hàng phòng ngự =====
-    tryLoftPass() {
-        const p = this.currentControlledPlayer;
+    tryLoftPass(who) {
+        const p = who || this.currentControlledPlayer;
         if (!p || !p.hasBall) return;
         const mates = p.teamMates.filter(m => m.active && m.role !== Role.GK);
         if (mates.length === 0) { this.tryPass(); return; }
@@ -783,8 +1017,8 @@ class Game {
 
     // ===== TRANH BÓNG (dùng chung nút với chuyền ngắn) =====
     // Có bóng → chuyền. Không có bóng → lao tới áp sát / xoạc bóng để đoạt lại bóng.
-    tryTackle() {
-        const p = this.currentControlledPlayer;
+    tryTackle(who) {
+        const p = who || this.currentControlledPlayer;
         if (!p || !p.active || p.hasBall) return;
         if ((p.tacklePressCd || 0) > 0) return;
 
@@ -829,7 +1063,7 @@ class Game {
         if (d > p.radius + oppOwner.radius + 24) return;
 
         let chance = p.role === Role.DEF ? 0.85 : (p.role === Role.MID ? 0.72 : 0.6);
-        if (p === this.currentControlledPlayer) chance += 0.1;
+        if (this.isHumanControlled(p)) chance += 0.1;
         if (Math.random() > chance) {
             // Xoạc hụt → đối thủ vẫn giữ bóng, phải chờ hồi chiêu
             p.tacklePressCd = 0.55;
@@ -852,8 +1086,8 @@ class Game {
         this.camera.shake(3, 0.15);
     }
 
-    tryShoot() {
-        const p = this.currentControlledPlayer;
+    tryShoot(who) {
+        const p = who || this.currentControlledPlayer;
         if (!p || !p.hasBall) return;
 
         // Shoot toward opponent goal - smart aim away from GK
@@ -886,8 +1120,8 @@ class Game {
         this.camera.shake(5, 0.2);
     }
 
-    trySkill() {
-        const p = this.currentControlledPlayer;
+    trySkill(who) {
+        const p = who || this.currentControlledPlayer;
         if (!p || !p.hasBall) return;
         if (p.stamina < 25) return;
         if (p.skillCooldown > 0) return;
@@ -930,16 +1164,34 @@ class Game {
         p.setAction('skill', 0.6);
     }
 
-    switchPlayer() {
-        const team = this.currentControlledPlayer.team;
+    // Đổi cầu thủ điều khiển (Q / △) — áp dụng cho người chơi tương ứng
+    switchPlayer(ctl) {
+        const c = ctl || (this.controls && this.controls[0]);
+        if (!c || !c.player) return;
+        const team = c.player.team;
         const list = this.teamPlayers[team];
-        const idx = list.indexOf(this.currentControlledPlayer);
-        const next = list[(idx + 1) % list.length];
-        this.currentControlledPlayer.isControlled = false;
-        this.currentControlledPlayer.aiControlled = true;   // người cũ chuyển sang AI
-        this.currentControlledPlayer = next;
+        const others = list.filter(p => p.role !== Role.GK);
+        // bỏ qua cầu thủ đang do người chơi khác điều khiển
+        const pool = others.filter(p => {
+            const other = this.controlOf(p);
+            return !other || other === c;
+        });
+        if (!pool.length) return;
+        const idx = pool.indexOf(c.player);
+        const next = pool[(idx + 1) % pool.length];
+        if (!next || next === c.player) return;
+
+        c.player.isControlled = false;
+        c.player.aiControlled = true;
+        c.player = next;
         next.isControlled = true;
         next.aiControlled = false;
+
+        if (this.controls.indexOf(c) === 0) this.currentControlledPlayer = next;
+        if (this.controls.indexOf(c) === 1) this.player2 = next;
+        // giữ cầu thủ vừa chọn một lúc, tránh tự động đổi lại ngay
+        this._autoSwitchCd = Math.max(this._autoSwitchCd || 0, 1.2);
+        this.particles.emit(next.pos.x, next.pos.y, c.color || '#ffd700', 6, { speed: 4 });
     }
 
     // ===== Auto control switching =====
@@ -950,69 +1202,84 @@ class Game {
         cp.aiControlled = true;
         player.isControlled = true;
         player.aiControlled = false;
+        const c = this.controlOf(cp);
+        if (c) c.player = player;
         this.currentControlledPlayer = player;
         // Hiệu ứng vàng đánh dấu mũi tên vừa nhảy sang cầu thủ mới
         this.particles.emit(player.pos.x, player.pos.y, '#ffd700', 5, { speed: 3 });
         this.particles.emit(player.pos.x, player.pos.y, '#ffd700', 6, { speed: 6, angle: -Math.PI / 2 });
     }
 
-    // Cầu thủ gần điểm (x,y) nhất của đội team, bỏ qua thủ môn
-    nearestTeammateTo(team, pos, exclude) {
-        let nearest = null, nearestDist = Infinity;
-        for (const p of this.teamPlayers[team]) {
-            if (!p.active || p === exclude) continue;
-            if (p.role === Role.GK) continue;   // thủ môn không auto-switch
-            const d = p.pos.dist(pos);
-            if (d < nearestDist) { nearestDist = d; nearest = p; }
+    updateControl(dt) {
+        if (!this.controls || !this.controls.length) return;
+        for (const ctl of this.controls) {
+            if (!ctl.player) continue;
+            if (!ctl.padReady()) continue;
+            this.updateControlFor(dt, ctl);
         }
-        return nearest ? { player: nearest, dist: nearestDist } : null;
     }
 
-    updateControl(dt) {
-        const cp = this.currentControlledPlayer;
-        if (!cp) return;
+    // Tự động đổi cầu thủ cho MỘT người chơi (không cướp cầu thủ của người kia)
+    updateControlFor(dt, ctl) {
+        const cp = ctl.player;
+        if (!cp || !cp.active) return;
         const owner = this.ball.owner;
+        const canTake = (pl) => {
+            const other = this.controlOf(pl);
+            return !other || other === ctl;
+        };
         this._autoSwitchCd = Math.max(0, (this._autoSwitchCd || 0) - dt);
         this._possessSwitchCd = Math.max(0, (this._possessSwitchCd || 0) - dt);
 
-        // A) Đồng đội (cùng đội người chơi) đang giữ bóng → chuyển quyền điều khiển
-        //    cho người nhận bóng / người vừa tranh được bóng
+        const applySwitch = (target) => {
+            if (!target || target === ctl.player || !canTake(target)) return false;
+            ctl.player.isControlled = false;
+            ctl.player.aiControlled = true;
+            ctl.player = target;
+            target.isControlled = true;
+            target.aiControlled = false;
+            if (this.controls.indexOf(ctl) === 0) this.currentControlledPlayer = target;
+            if (this.controls.indexOf(ctl) === 1) this.player2 = target;
+            this.particles.emit(target.pos.x, target.pos.y, ctl.color || '#ffd700', 5, { speed: 3 });
+            return true;
+        };
+
+        // A) Đồng đội đang giữ bóng -> chuyển sang người đó
         if (owner && owner.active && owner.team === cp.team && owner !== cp) {
-            if (this._possessSwitchCd <= 0) {
-                this.switchControlTo(owner);
-                this._possessSwitchCd = 0.45;
+            if (this._possessSwitchCd <= 0 && canTake(owner)) {
+                if (applySwitch(owner)) this._possessSwitchCd = 0.45;
             }
             return;
         }
 
-        // B) ĐỐI PHƯƠNG cướp bóng → mũi tên vàng TỰ ĐỘNG nhảy sang cầu thủ gần bóng nhất
-        //    để tranh bóng, không cần bấm Q.
+        // B) Đối phương cướp bóng -> mũi tên nhảy sang cầu thủ gần bóng nhất
         if (owner && owner.active && owner.team !== cp.team) {
             if (this._autoSwitchCd > 0) return;
-
-            // Xét toàn đội (kể cả người đang điều khiển) để chọn đúng người gần nhất
             let nearest = null, nearestDist = cp.pos.dist(owner.pos);
             for (const p of this.teamPlayers[cp.team]) {
                 if (!p.active || p.role === Role.GK) continue;
+                if (!canTake(p)) continue;
                 const d = p.pos.dist(owner.pos);
                 if (d < nearestDist - 10) { nearestDist = d; nearest = p; }
             }
-            // Người đang điều khiển đã là người gần nhất -> giữ nguyên, chỉ cần bấm nút tranh bóng
             if (nearest && nearest !== cp) {
-                this.switchControlTo(nearest);
-                this._autoSwitchCd = 0.55;
+                if (applySwitch(nearest)) this._autoSwitchCd = 0.55;
             }
             return;
         }
 
-        // C) Bóng tự do (vừa bị cướp bật ra / chuyền hỏng) → nhảy sang người gần bóng nhất
-        //    chỉ khi người đó gần hơn hẳn (tránh mũi tên nhảy loạn giữa các cầu thủ)
+        // C) Bóng tự do -> sang người gần bóng nhất (nếu gần hơn hẳn)
         if (!owner && this.ball.hasPhysics) {
             if (this._autoSwitchCd > 0) return;
-            const near = this.nearestTeammateTo(cp.team, this.ball.pos, null);
-            if (near && near.player !== cp && near.dist < cp.pos.dist(this.ball.pos) - 80) {
-                this.switchControlTo(near.player);
-                this._autoSwitchCd = 1.0;
+            let nearest = null, nearestDist = Infinity;
+            for (const p of this.teamPlayers[cp.team]) {
+                if (!p.active || p.role === Role.GK) continue;
+                if (!canTake(p)) continue;
+                const d = p.pos.dist(this.ball.pos);
+                if (d < nearestDist) { nearestDist = d; nearest = p; }
+            }
+            if (nearest && nearest !== cp && nearestDist < cp.pos.dist(this.ball.pos) - 80) {
+                if (applySwitch(nearest)) this._autoSwitchCd = 1.0;
             }
         }
     }
@@ -1029,6 +1296,7 @@ class Game {
         for (const p of this.players) {
             if (!p.aiControlled || !p.active) continue;
             if (p === this.currentControlledPlayer) continue;
+            if (this.isHumanControlled(p)) continue;   // P1 hoặc P2 đang điều khiển
             this.updatePlayerAI(p, dt);
         }
     }
@@ -1343,11 +1611,14 @@ class Game {
     aiDefend(p, owner, ownGoalX, midY) {
         const f = this.field;
         const chaseFactor = this.aiChaseFactor();
-        const controlled = this.currentControlledPlayer;
-        // Chỉ coi là "human đang áp sát" khi người chơi THUỘC ĐỘI ĐANG PHÒNG THỦ (cùng đội với p)
-        // và đang ở gần người giữ bóng. Nếu human đang giữ bóng thì AI đối phương phải PRESS.
-        const controlledOnDefense = controlled && controlled.team === p.team;
-        const controlledDist = controlledOnDefense ? controlled.pos.dist(owner.pos) : Infinity;
+        // Người chơi (P1/P2) đang ở gần bóng và thuộc đội đang phòng thủ hay không
+        let controlled = null, controlledDist = Infinity;
+        for (const hp of this.humanPlayers()) {
+            if (hp.team !== p.team) continue;
+            const d = hp.pos.dist(owner.pos);
+            if (d < controlledDist) { controlledDist = d; controlled = hp; }
+        }
+        const controlledOnDefense = !!controlled;
 
         const myDist = p.pos.dist(owner.pos);
 
@@ -1411,7 +1682,7 @@ class Game {
         if (ball.owner && ball.owner.active && ball.owner.hasBall) {
             ball.height = 0;
             ball.heightVel = 0;
-            if (ball.owner === this.currentControlledPlayer) {
+            if (this.isHumanControlled(ball.owner)) {
                 return; // Human control handled in handleHumanInput
             }
             // AI owner: ball in front of player, toward opponent goal
@@ -1674,7 +1945,7 @@ class Game {
             else if (p.role === Role.MID) chance = 0.12;
             else if (p.role === Role.FWD) chance = 0.06;
             
-            if (p === this.currentControlledPlayer) chance += 0.06;
+            if (this.isHumanControlled(p)) chance += 0.06;
 
             if (Math.random() < chance) {
                 owner.hasBall = false;
@@ -1835,6 +2106,7 @@ class Game {
                 fill.style.width = pct + '%';
             }
         }
+        if (typeof this.updateHUD2 === 'function') this.updateHUD2();
     }
 
     // ============= RENDERING =============
@@ -2347,12 +2619,14 @@ class Game {
         ctx.stroke();
 
         // === GAMEPLAY INDICATORS ===
-        // Controlled indicator
-        if (p === this.currentControlledPlayer) {
+        // Controlled indicator (màu theo người chơi: P1 vàng, P2 xanh)
+        const ctlOfP = this.controlOf ? this.controlOf(p) : null;
+        if (ctlOfP) {
+            const markerColor = ctlOfP.color || '#ffd700';
             const pulse = 1 + Math.sin(Date.now() * 0.008) * 0.1;
             ctx.beginPath();
             ctx.arc(cx, cy + r * 0.15, (r + 13) * pulse, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 215, 0, 0.85)';
+            ctx.strokeStyle = markerColor;
             ctx.lineWidth = 2.5;
             ctx.setLineDash([5, 5]);
             ctx.lineDashOffset = Date.now() * 0.01;
@@ -2367,15 +2641,23 @@ class Game {
             ctx.lineTo(cx + 7, arrowY);
             ctx.lineTo(cx, arrowY + 8);
             ctx.closePath();
-            ctx.fillStyle = '#ffd700';
+            ctx.fillStyle = markerColor;
             ctx.fill();
-            ctx.strokeStyle = '#b8860b';
+            ctx.strokeStyle = 'rgba(0,0,0,0.55)';
             ctx.lineWidth = 1;
             ctx.stroke();
+            // nhãn P1 / P2
+            if (this.isTwoPlayer && this.isTwoPlayer()) {
+                ctx.fillStyle = markerColor;
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(ctlOfP.label || '', cx, arrowY - 4);
+                ctx.textAlign = 'left';
+            }
         }
 
         // Stamina ring
-        if (p === this.currentControlledPlayer && p.stamina < 100) {
+        if (ctlOfP && p.stamina < 100) {
             ctx.beginPath();
             ctx.arc(cx, cy + r * 0.15, r + 7, -Math.PI / 2, -Math.PI / 2 + (p.stamina / 100) * Math.PI * 2);
             ctx.strokeStyle = p.stamina > 30 ? '#4ecdc4' : '#ff4444';
@@ -2588,6 +2870,46 @@ function initGame() {
         };
     }
 
+    // ===== Chế độ chơi 1 người / 2 người =====
+    const playModeEl = document.getElementById('play-mode');
+    const playModeStatusEl = document.getElementById('play-mode-status');
+
+    function updatePlayModeStatus() {
+        if (!playModeStatusEl) return;
+        if (!game.isTwoPlayer()) {
+            playModeStatusEl.className = 'controls-hint-text';
+            playModeStatusEl.textContent = 'P1: bàn phím / tay cầm chính';
+            return;
+        }
+        const pads = game.input.padCount || 0;
+        const rdy = game.isPlayer2Ready();
+        if (rdy) {
+            const c2 = game.controls[1];
+            playModeStatusEl.className = 'controls-hint-text ok';
+            playModeStatusEl.textContent = '✅ Đã có 2 tay cầm (P1 = tay cầm #1, P2 = tay cầm #' + (c2.getPadIndex() + 1) + ')'
+                + (game.playMode === '2p_vs' ? ' · Đối kháng Đỏ vs Xanh' : ' · Đồng đội cùng đội Đỏ');
+        } else {
+            playModeStatusEl.className = 'controls-hint-text warn';
+            playModeStatusEl.textContent = '⚠️ Cần kết nối tay cầm thứ 2 cho P2 (đang nhận ' + pads + ' tay cầm). '
+                + (game.input.padCount ? 'Nhấn nút trên tay cầm thứ hai để nhận diện.' : 'Cắm thêm tay cầm PS5 qua USB/Bluetooth.');
+        }
+    }
+
+    if (playModeEl) {
+        playModeEl.value = game.playMode;
+        playModeEl.onchange = (e) => {
+            game.setPlayMode(e.target.value);
+            updatePlayModeStatus();
+            updateHUD2();
+        };
+    }
+    game.onPlayModeChange = () => {
+        updatePlayModeStatus();
+        updateHUD2();
+    };
+    updatePlayModeStatus();
+    setInterval(updatePlayModeStatus, 900);
+
     // ===== Góc nhìn camera (3D) & chất lượng đồ họa =====
     const cameraModeEl = document.getElementById('camera-mode');
     if (cameraModeEl) {
@@ -2605,6 +2927,26 @@ function initGame() {
             try { localStorage.setItem('sf_gfx_quality', q); } catch (err) { /* ignore */ }
         };
     }
+
+    // Chỉ báo P2 trên HUD (chỉ hiện ở chế độ 2 người)
+    function updateHUD2() {
+        const box = document.getElementById('player2-indicator');
+        const nameEl = document.getElementById('player2-name');
+        if (!box) return;
+        if (!game.isTwoPlayer()) {
+            box.style.display = 'none';
+            return;
+        }
+        box.style.display = 'flex';
+        if (nameEl) {
+            const names = { goalkeeper: 'THỦ MÔN', defender: 'HẬU VỆ', midfielder: 'TIỀN VỆ', forward: 'TIỀN ĐẠO' };
+            const p2 = game.player2;
+            const ready = game.isPlayer2Ready();
+            nameEl.textContent = 'P2: ' + (p2 ? (names[p2.role] || 'CẦU THỦ') : '—') + (ready ? '' : ' (chờ tay cầm)');
+        }
+    }
+    game.updateHUD2 = updateHUD2;
+    updateHUD2();
 
     function updateCameraBadge() {
         const badge = document.getElementById('camera-mode-badge');
@@ -2819,7 +3161,14 @@ function initGame() {
     }
 
     // Hook sự kiện thay đổi kết nối
-    game.input.onGamepadChange = () => updateGamepadStatus();
+    game.input.onGamepadChange = () => {
+        updateGamepadStatus();
+        // 2 người chơi: gán lại tay cầm cho P2 khi danh sách tay cầm thay đổi
+        if (game.isTwoPlayer()) {
+            game.setupControls();
+            updatePlayModeStatus();
+        }
+    };
 
     const gpEnabledEl = document.getElementById('gamepad-enabled');
     if (gpEnabledEl) {

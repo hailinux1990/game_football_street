@@ -34,6 +34,22 @@ với **cầu thủ có đầy đủ chân tay** (mô hình humanoid phân khúc
   trên mặt sân. Khẩu độ 80, **xà ngang cao 45% khẩu độ**, sâu 34 — bóng bay **quá xà không tính bàn**,
   bóng đập **cột/xà dội ra kèm âm thanh** (không vào lưới).
 
+## Chế độ 2 người chơi (2 tay cầm PS5)
+
+Trong **Cài đặt → 👥 Chế độ chơi**:
+
+| Chế độ | Mô tả |
+|--------|-------|
+| **1 người chơi** | Bạn điều khiển đội Đỏ (bàn phím hoặc 1 tay cầm) |
+| **2 người — Đối kháng** | P1 = đội Đỏ, P2 = đội Xanh (P2 dùng **tay cầm thứ hai**) |
+| **2 người — Đồng đội** | Cả hai cùng đội Đỏ (P1 tiền đạo, P2 hậu vệ) |
+
+- P1 dùng bàn phím hoặc tay cầm thứ nhất; **P2 dùng tay cầm PS5 thứ hai** (cắm/rút bất kỳ lúc nào —
+  rút tay cầm thì cầu thủ của P2 tự chuyển cho AI và HUD báo "chờ tay cầm").
+- Mỗi người có **mũi tên chỉ cầu thủ riêng** (P1 vàng, P2 xanh) và **đổi người riêng**
+  (P1: `Q`, P2: `△`); tự động đổi người không cướp cầu thủ của người kia.
+- Khi có 2 người chơi, camera chuyển sang **bám bóng** để cả hai cùng thấy diễn biến.
+
 ## Cách chơi
 
 | Phím | Chức năng |

@@ -735,3 +735,15 @@ body.mode-3d #game-canvas-3d { display: block; }
     .match-banner { font-size: 1.2rem; padding: 10px 22px; letter-spacing: 1.5px; }
 }
 
+
+/* ==== Chỉ báo người chơi 2 (chế độ 2 người) ==== */
+.p2-indicator {
+    border-color: rgba(90, 209, 255, 0.65) !important;
+}
+.p2-indicator .indicator-dot {
+    background: #5ad1ff;
+    box-shadow: 0 0 10px #5ad1ff;
+}
+.p2-indicator span:last-child {
+    color: #9fe6ff;
+}

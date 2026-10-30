@@ -856,6 +856,26 @@
             this.markerArrow = arrow;
             this.markerRing = ring;
             this.scene.add(this.marker);
+
+            // Vòng chọn của người chơi 2 (màu xanh cyan)
+            const ring2Mat = new THREE.MeshBasicMaterial({
+                color: 0x5ad1ff, transparent: true, opacity: 0.9,
+                side: THREE.DoubleSide, depthWrite: false, fog: false
+            });
+            this.marker2 = new THREE.Group();
+            const ring2 = new THREE.Mesh(new THREE.RingGeometry(9.5, 12.5, 48), ring2Mat);
+            ring2.rotation.x = -Math.PI / 2;
+            ring2.position.y = 0.35;
+            this.marker2.add(ring2);
+            const arrow2Mat = new THREE.MeshBasicMaterial({ color: 0x5ad1ff, fog: false });
+            const arrow2 = new THREE.Mesh(new THREE.ConeGeometry(3.4, 7, 4), arrow2Mat);
+            arrow2.rotation.x = Math.PI;
+            arrow2.position.y = 42;
+            this.marker2.add(arrow2);
+            this.marker2Arrow = arrow2;
+            this.marker2Ring = ring2;
+            this.marker2.visible = false;
+            this.scene.add(this.marker2);
         }
 
         // ================= PLAYERS =================
@@ -1045,6 +1065,15 @@
                 desiredLook.set(P.cx + bx * 0.5, 0, P.cz - 30);
                 lambdaPos = 3.4; lambdaLook = 4.2;
                 cam.fov = 50;
+            } else if (g.playMode && g.playMode !== '1p') {
+                // ---- 2 NGƯỜI CHƠI: camera bám BÓNG (thấy cả P1 và P2) ----
+                const ball = g.ball.pos;
+                const bx = clamp(ball.x, P.x0 + 60, P.x1 - 60);
+                const bz = clamp(ball.y, P.z0 + 60, P.z1 - 60);
+                desiredPos.set(bx, 210, bz + 300);
+                desiredLook.set(bx, 4, bz - 10);
+                lambdaPos = 4.2; lambdaLook = 5.0;
+                cam.fov = 52;
             } else {
                 // ---- GÓC NHÌN NGƯỜI THỨ BA: sau lưng cầu thủ ----
                 const p = g.currentControlledPlayer || g.players[0];
@@ -1148,7 +1177,7 @@
             this.syncBall(safeDt);
             this.updateCrowd(safeDt);
 
-            // Vòng chọn + mũi tên
+            // Vòng chọn + mũi tên (P1 vàng, P2 xanh)
             const cp = this.game.currentControlledPlayer;
             if (cp && cp.active) {
                 this.marker.visible = true;
@@ -1159,6 +1188,17 @@
                 this.markerArrow.rotation.y = this.time * 1.6;
             } else {
                 this.marker.visible = false;
+            }
+            const p2 = this.game.player2;
+            if (p2 && p2.active && this.game.isTwoPlayer && this.game.isTwoPlayer()) {
+                this.marker2.visible = true;
+                this.marker2.position.set(p2.pos.x, 0, p2.pos.y);
+                const pulse2 = 1 + Math.sin(this.time * 6 + 1.2) * 0.06;
+                this.marker2Ring.scale.set(pulse2, pulse2, pulse2);
+                this.marker2Arrow.position.y = 42 + Math.sin(this.time * 2.4 + 1.2) * 1.6;
+                this.marker2Arrow.rotation.y = this.time * 1.6;
+            } else {
+                this.marker2.visible = false;
             }
 
             this.updateCamera(safeDt);

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Street Football 3D - FIFA Street Style</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="style.css?v=20261031d">
+    <link rel="stylesheet" href="style.css?v=20261101a">
 </head>
 <body>
     <div id="game-container">
@@ -69,6 +69,16 @@
                             </select>
                         </label>
                     </div>
+                    <div class="setting-group play-mode-group">
+                        <label>👥 Chế độ chơi:
+                            <select id="play-mode">
+                                <option value="1p">1 người chơi</option>
+                                <option value="2p_vs">2 người — Đối kháng (P1 Đỏ vs P2 Xanh)</option>
+                                <option value="2p_coop">2 người — Đồng đội (cùng đội Đỏ)</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div id="play-mode-status" class="controls-hint-text">P1: bàn phím / tay cầm chính · P2: tay cầm thứ hai</div>
                     <div class="setting-group control-mode-group">
                         <label>🎮 Chế độ điều khiển:
                             <select id="control-mode">
@@ -127,6 +137,7 @@
                     <p>6 cầu thủ 3D có đầy đủ chân tay, animation sút/chuyền/kỹ thuật</p>
                     <p>Trọng tài NPC thổi còi bắt đầu & kết thúc trận, khán đài có khán giả reo hò</p>
                     <p>3 góc nhìn: Người thứ ba, Toàn cảnh sân, và FIFA 99 (góc cao bám bóng)</p>
+                    <p>👥 Chơi 2 người cùng lúc với 2 tay cầm PS5 (đối kháng hoặc đồng đội)</p>
                     <br>
                     <p>Controls:</p>
                     <p>WASD / Mũi tên - Di chuyển cầu thủ</p>
@@ -179,6 +190,10 @@
                         <span class="indicator-dot"></span>
                         <span id="controlled-player-name">STRIKER</span>
                     </div>
+                    <div class="player-indicator p2-indicator" id="player2-indicator" style="display:none">
+                        <span class="indicator-dot p2"></span>
+                        <span id="player2-name">P2</span>
+                    </div>
                     <div class="skill-meter" id="skill-meter">
                         <div class="skill-bar"><div class="skill-fill" id="skill-fill"></div></div>
                         <span class="skill-label">THỂ LỰC</span>
@@ -216,14 +231,14 @@
     </div>
 
     <script src="js/vendor/three.min.js?v=160"></script>
-    <script src="js/game.js?v=20261031d"></script>
-    <script src="js/entities.js?v=20261031d"></script>
-    <script src="js/field.js?v=20261031d"></script>
-    <script src="js/ai.js?v=20261031d"></script>
-    <script src="js/player_model.js?v=20261031d"></script>
-    <script src="js/render3d.js?v=20261031d"></script>
+    <script src="js/game.js?v=20261101a"></script>
+    <script src="js/entities.js?v=20261101a"></script>
+    <script src="js/field.js?v=20261101a"></script>
+    <script src="js/ai.js?v=20261101a"></script>
+    <script src="js/player_model.js?v=20261101a"></script>
+    <script src="js/render3d.js?v=20261101a"></script>
 
-    <script src="js/ui.js?v=20261031d"></script>
-    <script src="js/main.js?v=20261031d"></script>
+    <script src="js/ui.js?v=20261101a"></script>
+    <script src="js/main.js?v=20261101a"></script>
 </body>
 </html>

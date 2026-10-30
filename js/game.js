@@ -646,6 +646,9 @@ class InputManager {
         this.gpRebinding = null;      // action gamepad đang chờ gán
         this.gpRebindCallback = null;
         this.gpPrevButtons = {};      // để phát hiện nút mới nhấn
+        // ===== Nhiều tay cầm (2 người chơi) =====
+        this.pads = new Map();        // index -> { buttons, pressed, axes, prev, id }
+        this.padCount = 0;
 
         // Chế độ điều khiển: 'keyboard' hoặc 'gamepad'
         this.controlMode = 'keyboard';
@@ -813,49 +816,86 @@ class InputManager {
         });
     }
 
-    // Đọc trạng thái tay cầm mỗi frame
+    // Đọc trạng thái tay cầm mỗi frame (hỗ trợ NHIỀU tay cầm cho 2 người chơi)
     pollGamepad() {
-        if (!this.gamepadEnabled) { this.gpConnected = false; return; }
-        const pads = (navigator.getGamepads && navigator.getGamepads()) || [];
-        let gp = null;
-        for (const p of pads) {
-            if (p && p.connected) { gp = p; break; }
+        if (!this.gamepadEnabled) {
+            this.gpConnected = false;
+            this.pads.clear();
+            this.padCount = 0;
+            return;
         }
-        if (!gp) {
+        const pads = (navigator.getGamepads && navigator.getGamepads()) || [];
+        const connected = [];
+        for (const p of pads) {
+            if (p && p.connected) connected.push(p);
+        }
+
+        if (!connected.length) {
             if (this.gpConnected) {
                 this.gpConnected = false;
-                if (typeof this.onGamepadChange === 'function') this.onGamepadChange(false, '');
+                this.gpId = '';
+                this.gpIndex = -1;
+                this.padCount = 0;
+                this.pads.clear();
+                if (typeof this.onGamepadChange === 'function') this.onGamepadChange(false, '', 0);
             }
             this.gpPrevButtons = {};
             return;
         }
-        if (!this.gpConnected) {
-            this.gpConnected = true;
-            this.gpId = gp.id || '';
-            this.gpIndex = gp.index;
-            if (typeof this.onGamepadChange === 'function') this.onGamepadChange(true, this.gpId);
-        }
 
-        // Cập nhật trạng thái nút + phát hiện nút mới nhấn
-        const prev = this.gpPrevButtons || {};
-        const cur = {};
-        for (let i = 0; i < gp.buttons.length; i++) {
-            const pressed = gp.buttons[i] && gp.buttons[i].pressed;
-            cur[i] = !!pressed;
-            if (pressed && !prev[i]) this.gpButtonsPressed[i] = true;
-        }
-        this.gpPrevButtons = cur;
-        this.gpButtons = cur;
-
-        // Trục cần trái (deadzone)
         const dz = 0.2;
-        let ax = gp.axes[0] || 0;
-        let ay = gp.axes[1] || 0;
-        if (Math.abs(ax) < dz) ax = 0;
-        if (Math.abs(ay) < dz) ay = 0;
-        this.gpAxes = [ax, ay, gp.axes[2] || 0, gp.axes[3] || 0];
+        const seen = new Set();
+        for (const gp of connected) {
+            const idx = gp.index;
+            seen.add(idx);
+            let st = this.pads.get(idx);
+            if (!st) {
+                st = { buttons: {}, pressed: {}, prev: {}, axes: [0, 0, 0, 0], id: gp.id || '' };
+                this.pads.set(idx, st);
+            }
+            // nút
+            const cur = {};
+            for (let i = 0; i < gp.buttons.length; i++) {
+                const pressed = !!(gp.buttons[i] && gp.buttons[i].pressed);
+                cur[i] = pressed;
+                if (pressed && !st.prev[i]) st.pressed[i] = true;
+            }
+            st.prev = cur;
+            st.buttons = cur;
+            st.id = gp.id || st.id;
+            // cần trái
+            let ax = gp.axes[0] || 0;
+            let ay = gp.axes[1] || 0;
+            if (Math.abs(ax) < dz) ax = 0;
+            if (Math.abs(ay) < dz) ay = 0;
+            st.axes = [ax, ay, gp.axes[2] || 0, gp.axes[3] || 0];
+        }
+        // bỏ những tay cầm đã rút
+        for (const idx of Array.from(this.pads.keys())) {
+            if (!seen.has(idx)) this.pads.delete(idx);
+        }
+        this.padCount = this.pads.size;
 
-        // Đang chờ gán nút tay cầm? Nút đầu tiên được nhấn sẽ được gán
+        // Tay cầm chính (P1) = index nhỏ nhất
+        const primaryIdx = Math.min.apply(null, Array.from(this.pads.keys()));
+        const gp = connected.find(p => p.index === primaryIdx) || connected[0];
+        const st = this.pads.get(gp.index);
+        const wasConnected = this.gpConnected;
+        this.gpConnected = true;
+        this.gpIndex = gp.index;
+        this.gpId = gp.id || '';
+        this.gpButtons = st.buttons;
+        this.gpButtonsPressed = st.pressed;
+        this.gpAxes = st.axes.slice();
+        this.gpPrevButtons = st.prev;
+        if (!wasConnected && typeof this.onGamepadChange === 'function') {
+            this.onGamepadChange(true, this.gpId, this.padCount);
+        } else if (typeof this.onGamepadChange === 'function' && this.padCount !== this._lastPadCount) {
+            this.onGamepadChange(true, this.gpId, this.padCount);
+        }
+        this._lastPadCount = this.padCount;
+
+        // Đang chờ gán nút tay cầm? Nút đầu tiên được nhấn (trên tay cầm chính) sẽ được gán
         if (this.gpRebinding) {
             for (let i = 0; i < gp.buttons.length; i++) {
                 if (gp.buttons[i] && gp.buttons[i].pressed) {
@@ -868,6 +908,60 @@ class InputManager {
                 }
             }
         }
+    }
+
+    // ===== API cho NHIỀU tay cầm (P1 / P2) =====
+    padIndexes() {
+        return Array.from(this.pads.keys()).sort((a, b) => a - b);
+    }
+
+    padConnected(padIndex) {
+        if (padIndex === null || padIndex === undefined) return false;
+        return this.gamepadEnabled && this.pads.has(padIndex);
+    }
+
+    // Chỉ số tay cầm thứ 2 (dành cho người chơi 2), -1 nếu chưa có
+    secondPadIndex() {
+        const idxs = this.padIndexes();
+        if (idxs.length < 2) return -1;
+        const primary = idxs[0];
+        return idxs.find(i => i !== primary);
+    }
+
+    padButtonDown(padIndex, buttonIndex) {
+        const st = this.pads.get(padIndex);
+        if (!st) return false;
+        return !!st.buttons[buttonIndex];
+    }
+
+    padButtonPressed(padIndex, buttonIndex) {
+        const st = this.pads.get(padIndex);
+        if (!st) return false;
+        return !!st.pressed[buttonIndex];
+    }
+
+    isActionGpDownFor(padIndex, action) {
+        const btn = this.gpBindings[action];
+        if (btn === null || btn === undefined) return false;
+        return this.padButtonDown(padIndex, btn);
+    }
+
+    isActionGpPressedFor(padIndex, action) {
+        const btn = this.gpBindings[action];
+        if (btn === null || btn === undefined) return false;
+        return this.padButtonPressed(padIndex, btn);
+    }
+
+    getGamepadMoveFor(padIndex) {
+        const st = this.pads.get(padIndex);
+        if (!st) return { x: 0, y: 0 };
+        let x = st.axes[0] || 0;
+        let y = st.axes[1] || 0;
+        if (this.padButtonDown(padIndex, GAMEPAD_DPAD.left)) x -= 1;
+        if (this.padButtonDown(padIndex, GAMEPAD_DPAD.right)) x += 1;
+        if (this.padButtonDown(padIndex, GAMEPAD_DPAD.up)) y -= 1;
+        if (this.padButtonDown(padIndex, GAMEPAD_DPAD.down)) y += 1;
+        return { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)) };
     }
 
     gamepadDown(buttonIndex) {
@@ -960,12 +1054,14 @@ class InputManager {
         this.keysPressed = {};
         this.keysReleased = {};
         this.gpButtonsPressed = {};
+        for (const st of this.pads.values()) st.pressed = {};
     }
 
     update() {
         this.keysPressed = {};
         this.keysReleased = {};
         this.gpButtonsPressed = {};
+        for (const st of this.pads.values()) st.pressed = {};
     }
 }
 
