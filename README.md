@@ -111,7 +111,16 @@ Nếu trình duyệt không hỗ trợ WebGL, game tự động quay về chế 
     có bị chặn đường chuyền không, đang ở phía trước không), **ra quyết định mỗi ~0.15s** nên bóng
     luân chuyển liên tục; bị bí ở sân nhà thì phá bóng dài, bị chặn hẳn thì chuyền bổng
   - Tiền đạo **lao vào vòng cấm** khi đồng đội dẫn bóng tới gần khung thành, tiền vệ dâng theo tấn công
-- **Thủ môn** bắt góc, bay người theo hướng bóng
+- **Thủ môn 2 bên được quyền tranh bóng và dâng lên (sweeper-keeper)**:
+  - **Lao ra tranh bóng** với đối phương khi bị dẫn bóng áp sát khung thành (tối đa ~130 đơn vị khỏi vạch),
+    xoạc bóng/ôm bóng dứt khoát (tỉ lệ đoạt bóng ~50–58%), có animation xoạc và âm thanh va chạm.
+  - **Ôm bóng tự do** chỉ khi bóng lăn ngay sát thủ môn (không "hút" mọi bóng trong vòng cấm).
+  - **Dâng lên** khi đội đang tấn công ở phần sân đối phương và **đứng cao hơn** để bắt bài đường chuyền,
+    nhưng luôn giới hạn khoảng cách để không bỏ khung thành.
+  - Có bóng thì **phát bóng cho đồng đội đang trống**, không có phương án mới phá bóng chếch ra biên
+    (không đá thẳng vào thủ môn đối phương).
+  - Mũi tên điều khiển không tự nhảy sang thủ môn (thủ môn do AI xử lý). Tinh chỉnh `game.gkRushLimit`
+    (0 = tắt, chỉ bám vạch).
 - **Sân đường phố**: tường bao quanh, bóng nảy tường
 
 ## 🎮 Tay cầm PS5 (DualSense)

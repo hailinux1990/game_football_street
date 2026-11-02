@@ -107,6 +107,7 @@ class Game {
         this.goalPostRadius = 2.1;
         this._barHitCd = 0;
         this._goalBlockTimer = 0;   // chặn tính bàn ngay sau khi bóng đập cột/xà
+        this.gkRushLimit = 130;     // thủ môn dám lao ra khỏi khung thành bao xa (0 = chỉ bám vạch)
 
         // Ball
         this.ball = new Entity(460, 330, 8, 'white');
@@ -1245,8 +1246,9 @@ class Game {
         };
 
         // A) Đồng đội đang giữ bóng -> chuyển sang người đó
+        //    (không tự chuyển sang thủ môn: thủ môn do AI xử lý rồi phát bóng lên)
         if (owner && owner.active && owner.team === cp.team && owner !== cp) {
-            if (this._possessSwitchCd <= 0 && canTake(owner)) {
+            if (owner.role !== Role.GK && this._possessSwitchCd <= 0 && canTake(owner)) {
                 if (applySwitch(owner)) this._possessSwitchCd = 0.45;
             }
             return;
@@ -1308,34 +1310,163 @@ class Game {
         // ---------- GOALKEEPER AI ----------
         if (p.role === Role.GK) {
             const isRed = p.team === 'red';
-            const goalLineX = isRed ? this.field.x + 40 : this.field.x + this.field.width - 40;
-            const gkX = isRed ? goalLineX + 25 : goalLineX - 25;
-            const goalY = this.field.y + this.field.height / 2;
+            const f = this.field;
+            const ownGoalX = isRed ? f.x : f.x + f.width;
+            const dirOut = isRed ? 1 : -1;                     // hướng từ khung thành ra sân
+            const goalLineX = isRed ? f.x + 40 : f.x + f.width - 40;
+            const gkX = isRed ? goalLineX + 22 : goalLineX - 22;   // vị trí bám vạch mặc định
+            const goalY = f.y + f.height / 2;
             const maxMove = 65;
+            const distToOwnGoal = Math.abs(bPos.x - ownGoalX);
 
-            // Track ball Y (slowly, beatable by corner shots)
-            let targetY = goalY + (bPos.y - goalY) * 0.4;
-            targetY = Math.max(goalY - maxMove, Math.min(goalY + maxMove, targetY));
-            targetY = Math.max(this.field.y + 25, Math.min(this.field.y + this.field.height - 25, targetY));
-
-            p.pos.y += (targetY - p.pos.y) * 0.07;  // Moderate tracking - beatable by corners
-            p.pos.x += (gkX - p.pos.x) * 0.06;
-
-            // If GK has the ball, kick it away
+            // ===== 1) Giữ bóng: chuyền cho đồng đội nếu thuận, không thì phá dài =====
             if (p.hasBall) {
                 p.gkKickCd = (p.gkKickCd || 0) - 1;
                 if (p.gkKickCd <= 0) {
-                    const dir = isRed ? 0 : Math.PI;
-                    this.ball.vel = Vector2.fromAngle(dir + (Math.random() - 0.5) * 0.5, 20);
-                    this.audio.ballImpact('gk', 0.95);
-                    this.ball.owner = null;
-                    p.hasBall = false;
-                    p.passCooldown = 0.4;
-                    p.setAction('kick', 0.5);
-                    for (const pp of this.players) pp.hasBall = false;
-                    p.gkKickCd = 20;  // 20 frames cooldown
+                    const opt = this.bestPassOption(p, isRed ? f.x + f.width : f.x, goalY);
+                    if (opt && opt.mate && opt.score > 8) {
+                        // phát bóng cho đồng đội đang trống
+                        this.aiPass(p, opt.mate, opt.loft);
+                    } else {
+                        // phá bóng chếch ra hành lang biên, tránh đá thẳng vào thủ môn đối phương
+                        const dir = isRed ? 0 : Math.PI;
+                        const lane = (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.25);
+                        const ang = dir + lane;
+                        this.ball.vel = Vector2.fromAngle(ang, 17);
+                        this.ball.pos = new Vector2(
+                            p.pos.x + Math.cos(ang) * (p.radius + 12),
+                            p.pos.y + Math.sin(ang) * (p.radius + 12)
+                        );
+                        this.ball.height = Math.random() < 0.4 ? 2 : 0;
+                        this.ball.heightVel = this.ball.height > 0 ? 9 : 0;
+                        this.audio.ballImpact('gk', 0.95);
+                        this.ball.owner = null;
+                        p.hasBall = false;
+                        p.passCooldown = 0.5;
+                        p.setAction('kick', 0.5);
+                        for (const pp of this.players) pp.hasBall = false;
+                    }
+                    p.gkKickCd = 30;
                 }
+                p.pos.x += (gkX - p.pos.x) * 0.06;
+                p.pos.y += (goalY - p.pos.y) * 0.06;
+                return;
             }
+
+            // ===== 2) Quyết định: lao ra tranh bóng / dâng lên bắt bài / bám vạch =====
+            const owner = this.ball.owner;
+            const oppHasBall = owner && owner.active && owner.team !== p.team;
+            const mateHasBall = owner && owner.active && owner.team === p.team;
+
+            // Khoảng cách tối đa thủ môn dám rời khung thành
+            const RUSH_LIMIT = this.gkRushLimit != null ? this.gkRushLimit : 130;   // lao ra tối đa
+            const SWEEP_LIMIT = 260;         // dâng lên khi đội tấn công (sweeper-keeper)
+            const dangerZone = distToOwnGoal < 240;
+
+            // Xác định cầu thủ gần bóng nhất của đội mình (để biết có nên tự xử lý không)
+            let mateCloser = false;
+            for (const m of p.teamMates) {
+                if (!m.active || m === p) continue;
+                if (m.pos.dist(bPos) < p.pos.dist(bPos) - 25) { mateCloser = true; break; }
+            }
+
+            // Lao ra khi: đối phương dẫn bóng áp sát, HOẶC bóng tự do ngay trước khung thành
+            const oppThreat = RUSH_LIMIT > 0 && oppHasBall && distToOwnGoal < Math.min(110, RUSH_LIMIT);
+            // Chỉ ôm bóng tự do khi bóng đang lăn ngay sát thủ môn (không "hút" mọi bóng trong vòng cấm)
+            const looseClose = RUSH_LIMIT > 0 && !owner &&
+                p.pos.dist(bPos) < 68 &&
+                distToOwnGoal < Math.min(120, RUSH_LIMIT) &&
+                this.ball.vel.mag() < 6;
+            const shouldRush = (oppThreat || looseClose) && dangerZone &&
+                (!mateCloser || distToOwnGoal < 95);
+
+            p.gkRushTime = (p.gkRushTime || 0);
+            p.gkTackleCd = Math.max(0, (p.gkTackleCd || 0) - dt);
+
+            if (shouldRush) {
+                // ----- LAO RA TRANH BÓNG (được quyền tranh bóng với đối phương) -----
+                p.gkRushTime += dt;
+                const chaseX = isRed
+                    ? Math.min(bPos.x, f.x + RUSH_LIMIT)
+                    : Math.max(bPos.x, f.x + f.width - RUSH_LIMIT);
+                const chaseY = Math.max(f.y + 30, Math.min(f.y + f.height - 30, bPos.y));
+                const dx = chaseX - p.pos.x;
+                const dy = chaseY - p.pos.y;
+                const d = Math.hypot(dx, dy);
+                const speed = p.maxSpeed * 1.15 * this.aiChaseFactor();
+                if (d > 2) {
+                    p.pos.x += (dx / d) * Math.min(d, speed * dt * 60);
+                    p.pos.y += (dy / d) * Math.min(d, speed * dt * 60);
+                }
+                p.aiRole = 'rush';
+
+                // Vào tầm thì xoạc bóng / ôm bóng
+                const reachedBall = p.pos.dist(this.ball.pos) < p.radius + this.ball.radius + 16;
+                if (owner && oppHasBall) {
+                    const dd = p.pos.dist(owner.pos);
+                    if (dd < p.radius + owner.radius + 22 && p.gkTackleCd <= 0 && owner.ballProtectTimer <= 0) {
+                        p.gkTackleCd = 0.55;
+                        p.setAction('tackle', 0.45);
+                        // Thủ môn lao ra quyết đoán: tỉ lệ đoạt bóng cao
+                        const chance = 0.5 + (this.difficulty === 'legend' ? 0.08 : 0);
+                        if (Math.random() < chance) {
+                            owner.hasBall = false;
+                            owner.ballProtectTimer = 0;
+                            p.hasBall = true;
+                            p.ballProtectTimer = 0.5;
+                            this.ball.owner = p;
+                            this.ball.pos = p.pos.clone();
+                            this.ball.vel = new Vector2(0, 0);
+                            this.ball.height = 0;
+                            this.ball.heightVel = 0;
+                            this.audio.ballImpact('gk', 1.0);
+                            this.particles.emitBurst(p.pos.x, p.pos.y, '#ffe27a', 10);
+                            p.gkKickCd = 18;
+                        } else {
+                            this.audio.ballImpact('touch', 0.6);
+                        }
+                    }
+                } else if (!owner && reachedBall) {
+                    // bóng tự do: thủ môn ôm gọn
+                    p.hasBall = true;
+                    p.ballProtectTimer = 0.5;
+                    this.ball.owner = p;
+                    this.ball.pos = p.pos.clone();
+                    this.ball.vel = new Vector2(0, 0);
+                    this.ball.height = 0;
+                    this.ball.heightVel = 0;
+                    this.audio.ballImpact('gk', 0.85);
+                    p.gkKickCd = 18;
+                }
+                p.update(dt);
+                return;
+            }
+
+            // ----- DÂNG LÊN (sweeper-keeper) khi đội đang tấn công -----
+            const allowAggro = RUSH_LIMIT > 0;      // gkRushLimit = 0 -> chỉ bám vạch
+            let targetX = gkX;
+            if (allowAggro && mateHasBall) {
+                const ballInOppHalf = isRed ? bPos.x > f.x + f.width * 0.5 : bPos.x < f.x + f.width * 0.5;
+                if (ballInOppHalf) {
+                    const advance = Math.min(SWEEP_LIMIT, distToOwnGoal * 0.35);
+                    targetX = ownGoalX + dirOut * (Math.abs(gkX - ownGoalX) + advance * 0.5);
+                    p.aiRole = 'sweep';
+                }
+            } else if (allowAggro && oppHasBall && distToOwnGoal > RUSH_LIMIT) {
+                // đối phương còn xa: đứng cao hơn một chút để bắt bài đường chuyền
+                targetX = ownGoalX + dirOut * (Math.abs(gkX - ownGoalX) + 45);
+                p.aiRole = 'hold';
+            }
+
+            // Track ball Y (chậm, vẫn có thể bị đánh bại bằng cú sút góc xa)
+            let targetY = goalY + (bPos.y - goalY) * 0.4;
+            if (p.aiRole === 'sweep') targetY = goalY + (bPos.y - goalY) * 0.3;
+            targetY = Math.max(goalY - maxMove, Math.min(goalY + maxMove, targetY));
+            targetY = Math.max(f.y + 25, Math.min(f.y + f.height - 25, targetY));
+
+            p.pos.y += (targetY - p.pos.y) * 0.07;
+            p.pos.x += (targetX - p.pos.x) * 0.06;
+            p.update(dt);
             return;
         }
 
@@ -1944,6 +2075,7 @@ class Game {
             if (p.role === Role.DEF) chance = 0.18;
             else if (p.role === Role.MID) chance = 0.12;
             else if (p.role === Role.FWD) chance = 0.06;
+            else if (p.role === Role.GK) chance = 0.30;   // thủ môn lao ra quyết đoán
             
             if (this.isHumanControlled(p)) chance += 0.06;
 
